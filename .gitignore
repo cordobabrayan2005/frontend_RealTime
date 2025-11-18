@@ -1,0 +1,55 @@
+# Dependencias
+node_modules/
+
+# Archivos de entorno
+.env
+.env.local
+.env.*.local
+
+# Builds y artefactos
+dist/
+build/
+coverage/
+*.local
+*.bak
+
+# Archivos temporales de herramientas
+*.log
+*.cache
+*.tmp
+*.swp
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Configuración de IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# Tests / snapshots
+coverage/
+*.test.js.snap
+*.test.ts.snap
+
+# Archivos de lock (si cambias de gestor de paquetes)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Service workers / PWA
+sw.*
+workbox-*
+
+# Vite cache
+.vite/
+vite.config.js.timestamp-*
+
+# TypeScript (si usas)
+*.tsbuildinfo
+
+# NPM cache y temporales
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

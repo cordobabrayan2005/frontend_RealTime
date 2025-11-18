@@ -1,0 +1,77 @@
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+export default function RealTime() {
+  useEffect(() => {
+    document.body.classList.remove("login-page");
+  }, []);
+
+  const [showCodeInput, setShowCodeInput] = useState(false);
+  const [roomCode, setRoomCode] = useState("");
+  const navigate = useNavigate();
+
+  function handleToggleCode() {
+    setShowCodeInput((s) => !s);
+  }
+
+  function handleJoinWithCode() {
+    if (!roomCode.trim()) {
+      // small UI feedback for empty code
+      alert("Por favor ingresa un código de reunión.");
+      return;
+    }
+    // For now just log — integrate with API/logic later
+    console.log("Intentando unirse con código:", roomCode);
+    alert(`Intentando unirse a la reunión: ${roomCode}`);
+    // reset
+    setRoomCode("");
+    setShowCodeInput(false);
+  }
+
+  return (
+    <main className="realtime-container" role="main" aria-labelledby="rt-title">
+      <button
+        className="hamburger"
+        aria-label="Abrir menú"
+        title="Menú"
+        onClick={() => window.dispatchEvent(new Event('toggleSidebar'))}
+      >
+        <span />
+        <span />
+        <span />
+      </button>
+      <section className="realtime-card" aria-describedby="rt-actions">
+        <div className="logo-box" style={{ background: '#fff', padding: '2.25rem', borderRadius: 8, boxShadow: '0 6px 20px rgba(16,24,40,0.04)', marginBottom: 24 }}>
+          <img src="/RealTime.png" alt="RealTime" className="logo-image large" />
+        </div>
+
+        <nav id="rt-actions" className="realtime-actions" aria-label="Acciones de reunión">
+          <button className="btn primary" type="button" onClick={() => navigate('/videocall')}>
+            Crear reunión
+          </button>
+
+          {/* Código de reunión: muestra input al hacer toggle */}
+          {!showCodeInput ? (
+            <button className="btn ghost" type="button" onClick={handleToggleCode}>
+              Código de reunión
+            </button>
+          ) : (
+            <div className="rt-code-row">
+              <input
+                className="rt-code-input"
+                type="text"
+                placeholder="Ingresa el código"
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value)}
+                aria-label="Código de reunión"
+              />
+              <button className="btn primary" type="button" onClick={handleJoinWithCode}>
+                Unirse
+              </button>
+            </div>
+          )}
+        </nav>
+      </section>
+    </main>
+  );
+}

@@ -1,0 +1,83 @@
+/* The code you provided is importing various modules and components needed for a React application.
+Here is a breakdown of each import statement: */
+import React, { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Forgot from "./pages/Forgot";
+import Reset from "./pages/Reset";
+import UserManual from "./pages/UserManual";
+import RealTime from "./pages/RealTime";
+import About from "./pages/About";
+import Sidebar from "./components/Sidebar";
+import Sitemap from "./components/Sitemap";
+import { api } from "./services/api";
+import Profile from "./pages/Profile";
+import VideoCall from "./pages/Videocall";
+
+/**
+ * The `App` function in this TypeScript React component manages authentication state, routing, and
+ * rendering different components based on the user's authentication status.
+ */
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Shell />
+    </BrowserRouter>
+  );
+}
+
+function Shell() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Show sitemap on all pages except the VideoCall route
+  const showSitemap = location.pathname !== '/videocall';
+
+  useEffect(() => {
+    function onToggle() {
+      setSidebarOpen((s) => !s);
+    }
+    window.addEventListener("toggleSidebar", onToggle as EventListener);
+    return () => window.removeEventListener("toggleSidebar", onToggle as EventListener);
+  }, []);
+
+  function handleClose() {
+    setSidebarOpen(false);
+  }
+
+  function handleLogout() {
+    try {
+      api.logout();
+    } catch (e) {
+      // ignore
+    }
+    handleClose();
+    navigate("/login");
+  }
+
+  return (
+    <div className={`app ${sidebarOpen ? "sidebar-open" : ""}`}>
+      <Sidebar isOpen={sidebarOpen} onClose={handleClose} onLogout={handleLogout} />
+
+      <main className="container">
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot" element={<Forgot />} />
+          <Route path="/reset" element={<Reset />} />
+          <Route path="/realtime" element={<RealTime />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/videocall" element={<VideoCall />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/user-manual" element={<UserManual />} />
+          <Route path="*" element={<Navigate to="/login" />} />
+        </Routes>
+      </main>
+      
+      {showSitemap && <Sitemap />}
+    </div>
+  );
+}
