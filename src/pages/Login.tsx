@@ -63,12 +63,11 @@ export default function Login({ onAuth }: Props) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password" className="sr-only form-label">Contraseña</label>
             <PasswordField
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Contraseña"
+              label=""
               required
               className="login-input"
             />
@@ -77,6 +76,23 @@ export default function Login({ onAuth }: Props) {
           <button type="submit" className="login-button" aria-label="Ingresar a tu cuenta">
             Ingresar
           </button>
+          
+          <div className="social-row" aria-hidden>
+            <button type="button" className="social-btn" aria-label="Iniciar sesión con Google">
+              <img src="/google.png" alt="Google" />
+              <span>Google</span>
+            </button>
+
+            <button type="button" className="social-btn" aria-label="Iniciar sesión con Facebook">
+              <img src="/faceb.png" alt="Facebook" />
+              <span>Facebook</span>
+            </button>
+            
+            <button type="button" className="social-btn" aria-label="Iniciar sesión con GitHub">
+              <img src="/github.png" alt="GitHub" />
+              <span>GitHub</span>
+            </button>
+          </div>
         </form>
 
         <nav className="login-links" aria-label="Enlaces de ayuda">

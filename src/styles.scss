@@ -256,6 +256,31 @@ select:-webkit-autofill {
 	text-decoration: underline;
 }
 
+/* Social sign-in buttons under the auth form */
+.social-row {
+	display: flex;
+	gap: 12px;
+	justify-content: center;
+	margin-top: 1rem;
+}
+
+.social-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	background: #ffffff;
+	border: 1px solid rgba(16,24,40,0.06);
+	border-radius: 10px;
+	cursor: pointer;
+	font-weight: 700;
+	color: #111827;
+}
+
+.social-btn img { width: 20px; height: 20px; display: block; }
+
+.social-btn:hover { box-shadow: 0 6px 18px rgba(16,24,40,0.08); }
+
 /* Small helpers for spacing on forms like signup */
 .form-row { display:flex; gap:0.75rem; }
 .form-col { flex:1; }

@@ -162,11 +162,11 @@ export default function Signup() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="password" className="sr-only">Contraseña</label>
               <PasswordField
                 id="password"
                 value={form.password}
                 onChange={(e) => set("password", e.target.value)}
+                label=""
                 placeholder="Contraseña"
                 required
                 className="login-input"
@@ -174,11 +174,11 @@ export default function Signup() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="confirmPassword" className="sr-only">Confirmar contraseña</label>
               <PasswordField
                 id="confirmPassword"
                 value={form.confirmPassword}
                 onChange={(e) => set("confirmPassword", e.target.value)}
+                label=""
                 placeholder="Confirmar contraseña"
                 required
                 className="login-input"
