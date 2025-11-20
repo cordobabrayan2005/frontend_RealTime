@@ -5,6 +5,8 @@ $input-border: #e6e7ea;
 $primary: #1d4ed8; /* azul solicitado */
 $label-color: #303031;
 
+@use "sass:color";
+
 /* App layout styles */
 html, body {
 	height: 100%;
@@ -86,11 +88,31 @@ body.login-page {
 .login-form .input-group { margin-bottom: 1.6rem; }
 .login-form .label { display:none; }
 .login-input {
-	background: #e6e9ec; /* slightly darker grey for the input blocks */
-	border-radius: 8px;
-	padding: 12px 14px;
-	border: none;
-	box-shadow: none;
+		background: #e6e9ec; /* slightly darker grey for the input blocks */
+		border-radius: 8px;
+		padding: 12px 14px;
+		border: none;
+		box-shadow: none;
+		font-size: 1.05rem;
+		color: rgba(11,27,43,0.85);
+}
+
+/* Login-card specific overrides to guarantee uniform text and placeholder colors */
+.login-card .login-input,
+.login-card .password-field input {
+	color: rgba(11,27,43,0.85) !important;
+	font-size: 1.05rem !important;
+}
+
+.login-card .login-input::placeholder,
+.login-card .password-field input::placeholder {
+	color: rgba(11,27,43,0.45) !important;
+	opacity: 1 !important;
+}
+
+/* Autofill override inside login card */
+.login-card input:-webkit-autofill {
+	-webkit-text-fill-color: rgba(11,27,43,0.85) !important;
 }
 
 .login-button { margin-top: 1.25rem; padding: 12px 16px; border-radius: 8px; }
@@ -151,6 +173,51 @@ input[type="number"] {
 	-webkit-appearance: none;
 }
 
+/* Normalización: asegurar que todos los campos de auth se rendericen igual */
+.login-card .login-input,
+.signup-card .login-input,
+.password-field input,
+.login-card input,
+.signup-card input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px !important;
+  min-height: 48px;
+  font-size: 1.05rem !important;
+  line-height: 1.2 !important;
+  color: rgba(11,27,43,0.85) !important;
+}
+
+/* Placeholder uniform */
+.login-card .login-input::placeholder,
+.signup-card .login-input::placeholder,
+.password-field input::placeholder {
+  font-size: 1.05rem !important;
+  color: rgba(11,27,43,0.45) !important;
+  opacity: 1 !important;
+}
+
+/* Autofill override for auth inputs */
+.login-card input:-webkit-autofill,
+.signup-card input:-webkit-autofill {
+  -webkit-text-fill-color: rgba(11,27,43,0.85) !important;
+  -webkit-box-shadow: 0 0 0 1000px #f5f5f7 inset !important;
+}
+
+/* Specific enforcement for password inputs to eliminate rendering differences */
+.login-card input#password,
+.login-card input#confirmPassword,
+.signup-card input#password,
+.signup-card input#confirmPassword,
+.password-field input[type="password"] {
+	font-size: 1.05rem !important;
+	padding: 12px 14px !important;
+	min-height: 48px !important;
+	line-height: 1.2 !important;
+	box-sizing: border-box !important;
+	color: rgba(11,27,43,0.85) !important;
+}
+
 /* focus state consistent with design */
 input[type="text"]:focus,
 input[type="email"]:focus,
@@ -165,7 +232,7 @@ select:focus {
 /* Password field: place the eye button inside the input */
 .password-field { width: 100%; }
 .password-wrap { position: relative; }
-.password-wrap .login-input { padding-right: 46px; }
+.password-wrap .login-input { padding-right: 40px; }
 .password-wrap .eye-btn {
 	position: absolute;
 	right: 8px;
@@ -173,13 +240,16 @@ select:focus {
 	transform: translateY(-50%);
 	background: transparent;
 	border: none;
-	padding: 6px;
+	padding: 4px;
+	width: 36px;
+	height: 36px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
 	color: $label-color;
 }
+.password-wrap .eye-btn svg { width: 18px; height: 18px; }
 .password-wrap .eye-btn:focus { outline: 2px solid rgba(29,78,216,0.18); border-radius: 6px; }
 
 /* Autofill overrides to preserve background and text color */
@@ -608,7 +678,7 @@ select:-webkit-autofill {
 .content-block h3 { margin: 0.25rem 0; color: #60a5fa; }
 
 .manual-footer { grid-column: 1 / -1; margin-top: 1rem; text-align:left; }
-.manual-footer .version-info { color: darken($label-color, 10%); font-size: 0.9rem; margin-top: 0.5rem; }
+.manual-footer .version-info { color: color.adjust($label-color, $lightness: -10%); font-size: 0.9rem; margin-top: 0.5rem; }
 
 @media (max-width: 900px) {
 	.manual-container { grid-template-columns: 1fr; }

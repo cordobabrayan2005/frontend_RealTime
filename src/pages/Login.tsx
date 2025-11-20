@@ -68,6 +68,7 @@ export default function Login({ onAuth }: Props) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               label=""
+              placeholder="Contraseña"
               required
               className="login-input"
             />
