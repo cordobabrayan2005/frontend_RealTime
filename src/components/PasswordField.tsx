@@ -1,3 +1,31 @@
+/**
+ * PasswordField component that renders a password input with a visibility toggle.
+ *
+ * This component provides a labeled password field with an eye-icon button
+ * allowing the user to show or hide the password text. It supports customization
+ * through props such as name, placeholder, class names, and autocomplete options.
+ *
+ * @component
+ * @param {Object} props - Props for the PasswordField component.
+ * @param {string} [props.id="password"] - The HTML `id` for the input element.
+ * @param {string} [props.name="password"] - The input `name` attribute.
+ * @param {string} [props.label="Contraseña"] - Label text displayed above the field.
+ * @param {string} [props.placeholder="••••••••"] - Placeholder displayed inside the input.
+ * @param {string} [props.value] - Current value of the password input.
+ * @param {(e: React.ChangeEvent<HTMLInputElement>) => void} [props.onChange] - Change handler for the input.
+ * @param {boolean} [props.required] - Whether the input is required.
+ * @param {string} [props.className="login-input"] - Custom CSS class for the input element.
+ * @param {string} [props.autoComplete="current-password"] - Autocomplete attribute for browser autofill.
+ *
+ * @returns {JSX.Element} A password input field with a show/hide toggle button.
+ *
+ * @example
+ * <PasswordField
+ *   value={password}
+ *   onChange={(e) => setPassword(e.target.value)}
+ *   required
+ * />
+ */
 import { useState } from "react";
 
 type Props = {

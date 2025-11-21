@@ -1,19 +1,42 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+/**
+ * RealTime page component.
+ *
+ * Provides actions to create a new meeting or join an existing one by code.
+ * Removes the "login-page" body class on mount.
+ *
+ * @returns {JSX.Element} The RealTime landing page.
+ */
 export default function RealTime() {
   useEffect(() => {
     document.body.classList.remove("login-page");
   }, []);
 
+  /** Whether the "join by code" input is visible. */
   const [showCodeInput, setShowCodeInput] = useState(false);
+  /** Current room code typed by the user. */
   const [roomCode, setRoomCode] = useState("");
   const navigate = useNavigate();
 
+  /**
+   * Toggle visibility of the room code input.
+   *
+   * @returns {void}
+   */
   function handleToggleCode() {
     setShowCodeInput((s) => !s);
   }
 
+  /**
+   * Attempt to join a meeting using the current roomCode.
+   *
+   * Performs basic client-side validation and presents simple UI feedback
+   * (alerts / console) until real join logic is implemented.
+   *
+   * @returns {void}
+   */
   function handleJoinWithCode() {
     if (!roomCode.trim()) {
       // small UI feedback for empty code
@@ -50,7 +73,6 @@ export default function RealTime() {
             Crear reunión
           </button>
 
-          {/* Código de reunión: muestra input al hacer toggle */}
           {!showCodeInput ? (
             <button className="btn ghost" type="button" onClick={handleToggleCode}>
               Código de reunión

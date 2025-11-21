@@ -1,15 +1,44 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+/**
+ * VideoCall React component.
+ * Manages local media (camera/microphone), a simulated participants list and an in-call chat UI.
+ *
+ * @returns {JSX.Element} The video call page element.
+ */
 export default function VideoCall() {
-  // Start with a single participant (the current user). More participants can be simulated.
+    // Start with a single participant (the current user). More participants can be simulated.
+
+  /**
+   * Participants list. Each participant has an { id: number, name: string } shape.
+   * Starts with a single local participant.
+   * @type {[{id:number,name:string}[], Function]}
+   */
   const [participants, setParticipants] = useState(() => [ { id: 1, name: 'Tú' } ]);
+
+  /** Whether the local camera is enabled. */
   const [cameraOn, setCameraOn] = useState(false);
+
+  /** Whether the local microphone is enabled. */
   const [micOn, setMicOn] = useState(false);
+
+  /** Whether the chat panel is visible. */
   const [showChat, setShowChat] = useState(false);
+
+  /** Current chat input value. */
   const [chatInput, setChatInput] = useState('');
+
+  /**
+   * Chat messages list. Each message has { id: number, author: string, text: string }.
+   * Initialized with a system welcome message.
+   */
   const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
 
+  /**
+   * Adds a simulated participant to the call, up to a maximum number for layout purposes.
+   * @returns {void}
+   */
   function addParticipant() {
     setParticipants((prev) => {
       if (prev.length >= 9) return prev; // limit for layout
@@ -18,10 +47,21 @@ export default function VideoCall() {
     });
   }
 
+  /**
+   * Toggle the chat panel visibility.
+   * @returns {void}
+   */
   function toggleChat() {
     setShowChat((s) => !s);
   }
 
+  /**
+   * Send the current chat input as a message.
+   * If an event is provided, prevents default form submission behavior.
+   *
+   * @param {React.FormEvent} [e] - Optional form event.
+   * @returns {void}
+   */
   function sendMessage(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const text = chatInput.trim();
@@ -34,12 +74,21 @@ export default function VideoCall() {
 
   // refs for local media
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  /** Ref that holds the current MediaStream for local audio/video. */
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
   // Manage media (video/audio) according to cameraOn and micOn
   useEffect(() => {
     let mounted = true;
 
+    /**
+     * Ensure the local media stream matches the desired camera/mic state.
+     * Requests getUserMedia when needed, reuses or replaces the existing stream,
+     * and stops tracks when no longer required.
+     *
+     * @returns {Promise<void>}
+     */
     async function ensureMedia() {
       try {
         const desiredVideo = !!cameraOn;
@@ -110,6 +159,10 @@ export default function VideoCall() {
 
   // cleanup on unmount
   useEffect(() => {
+    /**
+     * Cleanup any active media tracks on component unmount.
+     * @returns {void}
+     */
     return () => {
       const s = mediaStreamRef.current;
       if (s) s.getTracks().forEach(t => t.stop());
@@ -117,6 +170,10 @@ export default function VideoCall() {
     };
   }, []);
 
+  /**
+   * Hang up the call: clears participants and chat, then navigates back to the realtime landing.
+   * @returns {void}
+   */
   function hangup() {
     // reset state if desired
     setParticipants([]);

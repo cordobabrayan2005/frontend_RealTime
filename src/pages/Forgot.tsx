@@ -5,16 +5,53 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../services/api";
 
+/**
+ * Forgot password page component.
+ *
+ * Renders a simple "forgot password" form where the user can enter their email
+ * to receive a password reset link. Calls the api.forgot service and displays
+ * success or error feedback. Adds a page-level CSS class while mounted.
+ *
+ * @returns {JSX.Element} The forgot password page.
+ */
 export default function Forgot() {
+  /**
+   * Email input value for the recovery request.
+   * @type {string}
+   */
   const [email, setEmail] = useState("");
+
+  /**
+   * Status message shown to the user after submitting the form.
+   * @type {string}
+   */
   const [msg, setMsg] = useState("");
+
+  /**
+   * Message type used for styling: "success" | "error" | "info".
+   * @type {"success" | "error" | "info"}
+   */
   const [msgType, setMsgType] = useState<"success" | "error" | "info">("info");
 
+  /**
+   * Add a page-level class while the component is mounted for styling purposes.
+   * Cleans up the class on unmount.
+   */
   useEffect(() => {
     document.body.classList.add("login-page");
     return () => document.body.classList.remove("login-page");
   }, []);
 
+  /**
+   * Form submit handler.
+   *
+   * Sends a password recovery request to the API using the provided email.
+   * On success shows a generic success message (to avoid leaking account existence).
+   * On failure displays the API error message if available.
+   *
+   * @param {React.FormEvent} e - The form submit event.
+   * @returns {Promise<void>}
+   */
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     try {

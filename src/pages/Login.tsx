@@ -12,15 +12,59 @@ import { useNavigate, Link } from "react-router-dom";
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
 
+/**
+ * Props for the Login component.
+ * @typedef {Object} Props
+ * @property {Function} [onAuth] - Optional callback invoked after a successful authentication.
+ */
+
+/**
+ * Login component.
+ *
+ * Renders an email/password form, social auth links and handles authentication via the `api` service.
+ *
+ * @param {Props} props - Component props.
+ * @returns {JSX.Element} A login form UI.
+ */
 type Props = { onAuth?: () => void };
 
 export default function Login({ onAuth }: Props) {
+  /**
+   * Email input state.
+   * @type {string}
+   */
   const [email, setEmail] = useState("");
+
+  /**
+   * Password input state.
+   * @type {string}
+   */
   const [password, setPassword] = useState("");
+
+  /**
+   * Status message shown to the user (success / error / info).
+   * @type {string}
+   */
   const [msg, setMsg] = useState("");
+
+  /**
+   * Message type used for styling: "success" | "error" | "info".
+   * @type {"success" | "error" | "info"}
+   */
   const [msgType, setMsgType] = useState<"success" | "error" | "info">("info");
+
   const navigate = useNavigate();
 
+  /**
+   * Form submit handler.
+   *
+   * Calls api.login with the provided credentials. On success invokes the optional
+   * onAuth callback, shows a success message and navigates to the realtime page.
+   * On failure displays an error message returned from the API.
+   *
+   * @param {React.FormEvent} e - Form submit event.
+   * @returns {Promise<void>}
+   */
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
@@ -35,6 +79,9 @@ export default function Login({ onAuth }: Props) {
     }
   }
 
+  /**
+   * Add a page-level class while the component is mounted for styling.
+   */
   useEffect(() => {
     document.body.classList.add("login-page");
     return () => document.body.classList.remove("login-page");

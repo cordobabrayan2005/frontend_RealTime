@@ -1,3 +1,41 @@
+/**
+ * About component
+ *
+ * This React functional component renders the "About" page of the RealTime demo application.
+ * It provides information about the product, its mission, and key features.
+ *
+ * ## Behavior
+ * - On mount, it removes the `login-page` CSS class from the `<body>` element to ensure
+ *   correct styling when navigating away from the login view.
+ * - It uses semantic HTML and ARIA attributes to improve accessibility and screen reader support.
+ *
+ * ## Structure
+ * - Hero section: Displays the RealTime logo, title, and subtitle.
+ * - Content section: Explains what RealTime is, highlights main features, and outlines the mission.
+ * - Features grid: Cards describing accessibility, authentication flows, and meeting demo.
+ * - Version info: Shows current version and development details.
+ * - Navigation: Provides a link back to the home page.
+ *
+ * ## Accessibility
+ * - `role="main"` and `aria-labelledby="about-title"` are used for semantic structure.
+ * - WCAG 2.1 principles are followed to ensure compatibility with assistive technologies.
+ *
+ * @function About
+ * @returns {JSX.Element} The rendered About page component containing product information,
+ * mission statement, features, and navigation link.
+ *
+ * @example
+ * // Usage in a React Router setup
+ * import About from './About';
+ *
+ * function App() {
+ *   return (
+ *     <Routes>
+ *       <Route path="/about" element={<About />} />
+ *     </Routes>
+ *   );
+ * }
+ */
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 

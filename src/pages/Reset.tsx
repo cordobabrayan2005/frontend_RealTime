@@ -4,22 +4,70 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
 
+/**
+ * @typedef {Object} Participant
+ * @property {number} id
+ * @property {string} name
+ *
+ * @typedef {Object} ChatMessage
+ * @property {number} id
+ * @property {string} author
+ * @property {string} text
+ */
+
+/**
+ * Reset page component.
+ *
+ * Renders a password reset form that reads a token from the URL search params,
+ * validates the new password and confirmation locally and calls the API to
+ * perform the reset. Shows status messages and redirects to the login page
+ * on success.
+ *
+ * @returns {JSX.Element} The reset password page.
+ */
 export default function Reset() {
+  /**
+   * URL search params hook. The reset token is expected in the "token" param.
+   * @type {[URLSearchParams]}
+   */
   const [sp] = useSearchParams();
   const navigate = useNavigate();
-  const token = sp.get("token") || ""; // viene del link del correo
+  const token = sp.get("token") || ""; // token comes from the emailed link
 
+  /** New password input value. */
   const [password, setPassword] = useState("");
+  /** Confirm password input value. */
   const [confirm, setConfirm] = useState("");
+  /** Status / feedback message shown to the user. */
   const [msg, setMsg] = useState("");
+  /** Message type controls styling: "success" | "error" | "info". */
   const [msgType, setMsgType] = useState<"success" | "error" | "info">("info");
 
-  // mantener tu clase de página si te gusta la decoración
+  /**
+   * Add a page class for styling while the component is mounted.
+   * Cleanup removes the class on unmount.
+   */
   useEffect(() => {
     document.body.classList.add("login-page");
     return () => { document.body.classList.remove("login-page"); };
   }, []);
 
+  /**
+   * Form submit handler.
+   *
+   * Performs client-side validation:
+   *  - ensures a token is present
+   *  - enforces a minimum password length
+   *  - checks password and confirmation match
+   *
+   * On success it calls api.reset(token, password, confirm) and then redirects
+   * to the login page after a short delay.
+   *
+   * Errors from the API are displayed in the status message.
+   *
+   * @param {React.FormEvent} e - The form submit event.
+   * @returns {Promise<void>}
+   */
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) {

@@ -1,3 +1,29 @@
+/**
+ * Sitemap component
+ *
+ * This React functional component renders the footer section of the RealTime demo application.
+ * It provides a structured "site map" with navigation links to key pages and authentication flows.
+ *
+ * ## Behavior
+ * - Displays grouped navigation links for general pages and authentication-related routes.
+ * - Uses semantic HTML (`<footer>`, `<h3>`, `<ul>`, `<li>`) to improve readability and accessibility.
+ * - Includes ARIA attributes (`role="contentinfo"`, `aria-label="Mapa del sitio"`) for screen reader support.
+ *
+ * ## Structure
+ * - **Title:** "Mapa del sitio" heading.
+ * - **Columns:**
+ *   - Pages: Links to main sections such as Home, About, User Manual, Videocall demo, and Profile.
+ *   - Authentication: Links to login, signup, password recovery, reset, and change password flows.
+ * - **Footer note:** Copyright notice.
+ *
+ * ## Accessibility
+ * - `role="contentinfo"` identifies the footer as a landmark region.
+ * - `aria-label="Mapa del sitio"` provides a descriptive label for assistive technologies.
+ *
+ * @function Sitemap
+ * @returns {JSX.Element} The rendered footer component containing navigation links and copyright.
+ *
+ */
 import React from 'react';
 import { Link } from 'react-router-dom';
 

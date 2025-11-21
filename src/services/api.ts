@@ -6,7 +6,7 @@
 type AnyObj = Record<string, any>;
 
 export const api = {
-  // Auth básicas (stubs)
+  // Basic Auth (stubs)
   signup: async (data: AnyObj) => {
     return Promise.resolve({ ok: true, user: { id: 'local-user', ...data } });
   },
@@ -23,12 +23,12 @@ export const api = {
     return { ok: true };
   },
 
-  // Perfil
+  // Profile
   me: async () => Promise.resolve({ id: 'local-user', name: 'Usuario Local', email: 'local@example.com' }),
   updateMe: async (data: AnyObj) => Promise.resolve({ id: 'local-user', ...data }),
   deleteMe: async () => Promise.resolve({ ok: true }),
 
-  // Recuperación de contraseña (no-op)
+  // Password recovery (no-op)
   forgot: async (email: string) => Promise.resolve({ ok: true }),
   reset: async (token: string, password: string, confirmPassword: string) => Promise.resolve({ ok: true }),
   changePassword: async (currentPassword: string, newPassword: string, confirmPassword: string) =>
