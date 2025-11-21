@@ -522,8 +522,8 @@ select:-webkit-autofill {
 .vc-top-left-back { position: absolute; left: 18px; top: 18px; font-size: 22px; color: #fff; cursor: pointer; z-index: 1300; }
 .vc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 28px;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+	gap: 61px; /* increased breathing room between users */
   max-width: 900px;
   margin: 16px auto;
   align-items: stretch;
@@ -535,6 +535,18 @@ select:-webkit-autofill {
 .vc-control-add { background: #0ea5e9; color: #fff; }
 .vc-tile { display:flex; flex-direction:column; align-items:center; }
 .vc-card { width: 220px; height: 160px; background: #242323; border-radius: 22px; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow: 0 8px 24px rgba(2,6,23,0.6); padding: 12px; }
+.vc-card { overflow: hidden; /* ensure video/content can't overflow card */ }
+
+/* Local video should fit the card and preserve aspect ratio without overflowing */
+.vc-local-video {
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+	border-radius: inherit;
+}
+
+.vc-tile { padding: 15px 0; }
 .vc-avatar { width: 96px; height: 96px; border-radius: 50%; background: #cfe7ff; display:flex; align-items:center; justify-content:center; color:#07112a; font-weight:800; font-size: 22px; }
 .vc-name { margin-top: 10px; color: #e6eef8; opacity: 0.95; font-weight:600; }
 .vc-more .vc-card { display:flex; align-items:center; justify-content:center; }

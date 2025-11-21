@@ -42,17 +42,24 @@ export default function VideoCall() {
 
     async function ensureMedia() {
       try {
-        const s = mediaStreamRef.current;
+        const desiredVideo = !!cameraOn;
+        const desiredAudio = !!micOn;
+        const current = mediaStreamRef.current;
 
-        // If no stream yet, request based on current needs
-        if (!s) {
-          const constraints = { video: !!cameraOn, audio: !!micOn };
-          if (!constraints.video && !constraints.audio) return;
-          const stream = await navigator.mediaDevices.getUserMedia(constraints);
-          if (!mounted) {
-            stream.getTracks().forEach(t => t.stop());
-            return;
+        // If nothing is desired, ensure we release any existing stream
+        if (!desiredVideo && !desiredAudio) {
+          if (current) {
+            current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+            mediaStreamRef.current = null;
+            if (localVideoRef.current) localVideoRef.current.srcObject = null;
           }
+          return;
+        }
+
+        // If there is no current stream, just request one with desired constraints
+        if (!current) {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: desiredVideo, audio: desiredAudio });
+          if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
           mediaStreamRef.current = stream;
           if (localVideoRef.current && stream.getVideoTracks().length) {
             try { localVideoRef.current.srcObject = stream; await localVideoRef.current.play(); } catch (e) { /* ignore */ }
@@ -60,57 +67,35 @@ export default function VideoCall() {
           return;
         }
 
-        // If stream exists, enable/disable tracks as requested
-        // Video
-        const hasVideo = s.getVideoTracks().length > 0;
-        if (cameraOn) {
-          if (hasVideo) s.getVideoTracks().forEach(t => t.enabled = true);
-          else {
-            // request video-only and add tracks
-            const vs = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            vs.getVideoTracks().forEach(t => s.addTrack(t));
-            if (localVideoRef.current) localVideoRef.current.srcObject = s;
-          }
-        } else {
-          // Stop and remove video tracks to fully release the camera device
-          s.getVideoTracks().forEach(t => {
-            try { t.stop(); } catch (e) { /* ignore */ }
-            try { s.removeTrack(t); } catch (e) { /* ignore */ }
-          });
-          if (localVideoRef.current) {
-            try { localVideoRef.current.srcObject = null; } catch (e) { /* ignore */ }
-          }
+        // There is a current stream. If its tracks already match desired constraints, just enable/disable them.
+        const hasVideo = current.getVideoTracks().length > 0;
+        const hasAudio = current.getAudioTracks().length > 0;
+
+        if (hasVideo === desiredVideo && hasAudio === desiredAudio) {
+          // Toggle enabled flags to reflect current desired state
+          current.getVideoTracks().forEach(t => t.enabled = desiredVideo);
+          current.getAudioTracks().forEach(t => t.enabled = desiredAudio);
+          return;
         }
 
-        // Audio
-        const hasAudio = s.getAudioTracks().length > 0;
-        if (micOn) {
-          if (hasAudio) s.getAudioTracks().forEach(t => t.enabled = true);
-          else {
-            const as = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            as.getAudioTracks().forEach(t => s.addTrack(t));
-          }
-        } else {
-          // Stop and remove audio tracks to release the microphone
-          s.getAudioTracks().forEach(t => {
-            try { t.stop(); } catch (e) { /* ignore */ }
-            try { s.removeTrack(t); } catch (e) { /* ignore */ }
-          });
-        }
+        // Otherwise, re-request a fresh stream with the exact desired constraints and replace the old one.
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: desiredVideo, audio: desiredAudio });
+        if (!mounted) { newStream.getTracks().forEach(t => t.stop()); return; }
 
-        // If the stream has no tracks left, release reference
-        if (s.getTracks().length === 0) {
-          try {
-            mediaStreamRef.current = null;
-          } catch (e) { /* ignore */ }
-        }
+        // Stop old tracks
+        try {
+          current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+        } catch (e) { /* ignore */ }
 
+        mediaStreamRef.current = newStream;
+        if (localVideoRef.current) {
+          try { localVideoRef.current.srcObject = newStream; if (newStream.getVideoTracks().length) await localVideoRef.current.play(); } catch (e) { /* ignore */ }
+        }
       } catch (err: any) {
         console.error('getUserMedia error', err);
         if (err && /NotAllowedError|SecurityError/.test(err.name)) {
           alert('Permiso denegado para acceder a la cámara/micrófono.');
         }
-        // reflect state
         if (!navigator.mediaDevices) {
           setCameraOn(false);
           setMicOn(false);
