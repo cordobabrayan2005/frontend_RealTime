@@ -79,20 +79,20 @@ export default function Login({ onAuth }: Props) {
           </button>
           
           <div className="social-row" aria-hidden>
-            <button type="button" className="social-btn" aria-label="Iniciar sesión con Google">
+            <a className="social-btn" href="/auth/google" aria-label="Iniciar sesión con Google">
               <img src="/google.png" alt="Google" />
               <span>Google</span>
-            </button>
+            </a>
 
-            <button type="button" className="social-btn" aria-label="Iniciar sesión con Facebook">
+            <a className="social-btn" href="/auth/facebook" aria-label="Iniciar sesión con Facebook">
               <img src="/faceb.png" alt="Facebook" />
               <span>Facebook</span>
-            </button>
+            </a>
             
-            <button type="button" className="social-btn" aria-label="Iniciar sesión con GitHub">
+            <a className="social-btn" href="/auth/github" aria-label="Iniciar sesión con GitHub">
               <img src="/github.png" alt="GitHub" />
               <span>GitHub</span>
-            </button>
+            </a>
           </div>
         </form>
 
