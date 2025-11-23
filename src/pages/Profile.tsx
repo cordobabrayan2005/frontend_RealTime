@@ -1,70 +1,55 @@
-
-/* The `import React, { useEffect, useState } from "react";` statement is importing the necessary
-modules from the React library. Specifically, it is importing the `useEffect` and `useState` hooks
-from React, which are essential for managing side effects and state in functional components. */
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 
-/**
- * The `Profile` function in TypeScript React handles user profile management including loading,
- * updating, and deleting user information with error handling and user feedback.
- * @returns The `Profile` component is being returned. It includes a form for editing user profile
- * information such as first name, last name, age, and email. It also has buttons for saving changes,
- * logging out, and deleting the account. Additionally, there are messages displayed based on actions
- * taken, such as updating the profile, logging out, or deleting the account.
- */
 export default function Profile() {
-  /* The code snippet `const [me, setMe] = useState<any>(null);` and `const [msg, setMsg] =
-  useState("");` in the Profile component is utilizing the `useState` hook from React to manage
-  state within a functional component. */
   const [me, setMe] = useState<any>(null);
   const [msg, setMsg] = useState("");
+  const [editing, setEditing] = useState(false); // Para alternar edición
+  const [form, setForm] = useState({
+    name: "",
+    lastname: "",
+    age: "",
+  });
   const navigate = useNavigate();
 
-  /**
-   * The function `load` asynchronously fetches user data from an API and sets the retrieved data to
-   * the state variable `me`, while handling any errors by setting an error message in the state
-   * variable `msg`.
-   */
   async function load() {
     try {
       const data = await api.me();
       setMe(data);
+      setForm({
+        name: data.name || "",
+        lastname: data.lastname || "",
+        age: data.age || "",
+      });
     } catch (e: any) {
       setMsg(e.message);
     }
   }
 
-  /* The `useEffect(() => { load(); }, []);` code snippet in the `Profile` component is utilizing the
-  `useEffect` hook from React. This hook is used to perform side effects in functional components. */
   useEffect(() => {
     load();
   }, []);
 
-  /**
-   * The function `save` updates user profile information using an API call and displays a success
-   * message if the update is successful, or an error message if there is an error.
-   */
+  function set<K extends keyof typeof form>(k: K, v: any) {
+    setForm({ ...form, [k]: v });
+  }
+
   async function save() {
     try {
       const updated = await api.updateMe({
-        name: me.name,
-        lastname: me.lastname,
-        age: me.age,
-        email: me.email,
+        name: form.name,
+        lastname: form.lastname,
+        age: Number(form.age),
       });
       setMe(updated);
       setMsg("Perfil actualizado correctamente ✅");
+      setEditing(false); // Salir de edición
     } catch (e: any) {
       setMsg(e.message);
     }
   }
 
-  /**
-   * The function `kill` attempts to delete a user account using an API call and displays a success
-   * message if successful, or an error message if an exception occurs.
-   */
   async function kill() {
     const confirmDelete = window.confirm('¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');
     if (!confirmDelete) return;
@@ -77,9 +62,6 @@ export default function Profile() {
     }
   }
 
-  /* The code snippet `if (!localStorage.getItem("token")) return <p>Por favor inicia sesión
-  primero.</p>; if (!me) return <p>Cargando perfil...</p>;` in the `Profile` component is performing
-  two checks: */
   if (!localStorage.getItem("token")) return <p>Por favor inicia sesión primero.</p>;
   if (!me) return <p>Cargando perfil...</p>;
 
@@ -93,33 +75,50 @@ export default function Profile() {
             <h2 id="profile-title">Mi perfil</h2>
 
             <div className="profile-field">
-              <div className="field-label">Nombres</div>
-              <div className="field-value">{me.name}</div>
+              <label className="field-label">Nombres</label>
+              {editing ? (
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => set("name", e.target.value)}
+                  className="field-input"
+                />
+              ) : (
+                <div className="field-value">{me.name}</div>
+              )}
             </div>
 
             <div className="profile-field">
-              <div className="field-label">Apellidos</div>
-              <div className="field-value">{me.lastname}</div>
+              <label className="field-label">Apellidos</label>
+              {editing ? (
+                <input
+                  type="text"
+                  value={form.lastname}
+                  onChange={(e) => set("lastname", e.target.value)}
+                  className="field-input"
+                />
+              ) : (
+                <div className="field-value">{me.lastname}</div>
+              )}
             </div>
 
             <div className="profile-field">
-              <div className="field-label">Edad</div>
-              <div className="field-value">{me.age}</div>
+              <label className="field-label">Edad</label>
+              {editing ? (
+                <input
+                  type="number"
+                  value={form.age}
+                  onChange={(e) => set("age", e.target.value)}
+                  className="field-input"
+                />
+              ) : (
+                <div className="field-value">{me.age}</div>
+              )}
             </div>
 
             <div className="profile-field">
-              <div className="field-label">Correo electronico</div>
-              <div className="field-value">{me.email}</div>
-            </div>
-
-            <div className="profile-field">
-              <div className="field-label">Cambiar contraseña</div>
-              <div className="field-value">__________</div>
-            </div>
-
-            <div className="profile-field">
-              <div className="field-label">Confirmar contraseña</div>
-              <div className="field-value">__________</div>
+              <label className="field-label">Correo electrónico</label>
+              <div className="field-value">{me.email}</div> {/* Solo lectura */}
             </div>
           </div>
 
@@ -127,8 +126,8 @@ export default function Profile() {
 
           <div className="profile-right">
             <div className="actions-card">
-              <button className="btn primary save-btn" onClick={save}>
-                <span>Guardar cambios</span>
+              <button className="btn primary save-btn" onClick={editing ? save : () => setEditing(true)}>
+                <span>{editing ? "Guardar cambios" : "Editar perfil"}</span>
               </button>
 
               <div className="actions-list">
