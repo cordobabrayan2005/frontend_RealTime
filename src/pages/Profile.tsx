@@ -49,8 +49,8 @@ export default function Profile() {
   async function save() {
     try {
       const updated = await api.updateMe({
-        firstName: me.firstName,
-        lastName: me.lastName,
+        name: me.firstName,
+        lastname: me.lastName,
         age: me.age,
         email: me.email,
       });
