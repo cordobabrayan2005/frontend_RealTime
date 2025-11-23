@@ -18,8 +18,10 @@
     "vite-plugin-purgecss": "^0.2.13"
   },
   "dependencies": {
+    "firebase": "^12.6.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.4"
+    "react-router-dom": "^7.9.4",
+    "zustand": "^5.0.8"
   }
 }
