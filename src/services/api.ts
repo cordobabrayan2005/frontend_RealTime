@@ -30,7 +30,8 @@ async function request(path: string, options: RequestInit = {}) {
 
   let res: Response;
   try {
-    const url = `${BASE}${path}`;
+    // Corrección: Asegurar que la URL tenga / entre BASE y path
+    const url = `${BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
     // mask Authorization when logging
     const headersToLog = { ...headers } as Record<string, any>;
     if (headersToLog.Authorization) headersToLog.Authorization = '***';
@@ -55,6 +56,7 @@ async function request(path: string, options: RequestInit = {}) {
   }
 
   if (!res.ok) {
+    // Corrección: Agregar undefined en la línea de error
     const message = (data && typeof data === 'object' && (data.message || data.error)) || res.statusText || (typeof data === 'string' ? data : undefined);
     console.error('[api] ERROR RESPONSE', { url: `${BASE}${path}`, status: res.status, data });
     throw new Error(message || 'Error en la petición');
@@ -71,9 +73,9 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 export const api = {
-  signup: async (data: AnyObj) => request('api/register', { method: 'POST', body: JSON.stringify(data) }),
+  signup: async (data: AnyObj) => request('/api/register', { method: 'POST', body: JSON.stringify(data) }),
   login: async (email: string, password: string) => {
-    const result = await request('api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    const result = await request('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     if (result?.token) localStorage.setItem('token', result.token);
     return result;
   },
@@ -81,22 +83,22 @@ export const api = {
     localStorage.removeItem('token');
     return { ok: true };
   },
-  me: async () => request('api/profile', { method: 'GET' }),
-  updateMe: async (data: AnyObj) => request('api/profile', { method: 'PUT', body: JSON.stringify(data) }),
-  deleteMe: async () => request('api/profile', { method: 'DELETE' }),
-  forgot: async (email: string) => request('api/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  me: async () => request('/api/profile', { method: 'GET' }),
+  updateMe: async (data: AnyObj) => request('/api/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMe: async () => request('/api/profile', { method: 'DELETE' }),
+  forgot: async (email: string) => request('/api/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
   reset: async (token: string, password: string) =>
-    request('api/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword: password }) }),
+    request('/api/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword: password }) }),
   changePassword: async (currentPassword: string, newPassword: string, token?: string) => {
     if (token) {
-      return request('api/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) });
+      return request('/api/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) });
     }
     throw new Error('El endpoint para cambiar contraseña con la sesión no está implementado en el backend');
   },
   socialLogin: async (idToken: string, provider: string) => {
-    const result = await request('api/login-social', { 
-      method: 'POST', 
-      body: JSON.stringify({ idToken, provider }) 
+    const result = await request('/api/login-social', {
+      method: 'POST',
+      body: JSON.stringify({ idToken, provider })
     });
     if (result?.token) localStorage.setItem('token', result.token);
     return result;
