@@ -42,10 +42,10 @@ export default function Profile() {
     load();
   }, []);
 
- /**
-  * The function `save` updates user profile information using an API call and displays a success
-  * message if the update is successful, or an error message if there is an error.
-  */
+  /**
+   * The function `save` updates user profile information using an API call and displays a success
+   * message if the update is successful, or an error message if there is an error.
+   */
   async function save() {
     try {
       const updated = await api.updateMe({
@@ -66,6 +66,8 @@ export default function Profile() {
    * message if successful, or an error message if an exception occurs.
    */
   async function kill() {
+    const confirmDelete = window.confirm('¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');
+    if (!confirmDelete) return;
     try {
       await api.deleteMe();
       api.logout();
