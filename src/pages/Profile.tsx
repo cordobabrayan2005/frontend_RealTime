@@ -49,8 +49,8 @@ export default function Profile() {
   async function save() {
     try {
       const updated = await api.updateMe({
-        name: me.firstName,
-        lastname: me.lastName,
+        name: me.name,
+        lastname: me.lastname,
         age: me.age,
         email: me.email,
       });
@@ -94,12 +94,12 @@ export default function Profile() {
 
             <div className="profile-field">
               <div className="field-label">Nombres</div>
-              <div className="field-value">{me.firstName}</div>
+              <div className="field-value">{me.name}</div>
             </div>
 
             <div className="profile-field">
               <div className="field-label">Apellidos</div>
-              <div className="field-value">{me.lastName}</div>
+              <div className="field-value">{me.lastname}</div>
             </div>
 
             <div className="profile-field">
