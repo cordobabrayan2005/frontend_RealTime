@@ -9,6 +9,7 @@
 // src/pages/Login.tsx
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useAuthStore } from '../stores/authStore';  // Nuevo
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
 
@@ -21,7 +22,7 @@ import PasswordField from "../components/PasswordField";
 /**
  * Login component.
  *
- * Renders an email/password form, social auth links and handles authentication via the `api` service.
+ * Renders an email/password form, social auth buttons and handles authentication via the `api` service and Zustand store.
  *
  * @param {Props} props - Component props.
  * @returns {JSX.Element} A login form UI.
@@ -54,11 +55,12 @@ export default function Login({ onAuth }: Props) {
   const [msgType, setMsgType] = useState<"success" | "error" | "info">("info");
 
   const navigate = useNavigate();
+  const { login, socialLogin, isLoading, error } = useAuthStore();  // Nuevo
 
   /**
    * Form submit handler.
    *
-   * Calls api.login with the provided credentials. On success invokes the optional
+   * Calls store.login with the provided credentials. On success invokes the optional
    * onAuth callback, shows a success message and navigates to the realtime page.
    * On failure displays an error message returned from the API.
    *
@@ -68,7 +70,7 @@ export default function Login({ onAuth }: Props) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await api.login(email, password);
+      await login(email, password);  // Usa store
       onAuth?.();
       setMsg("Inicio de sesión exitoso.");
       setMsgType("success");
@@ -78,6 +80,27 @@ export default function Login({ onAuth }: Props) {
       setMsgType("error");
     }
   }
+
+  /**
+   * Social login handler.
+   *
+   * Calls store.socialLogin with the provider. On success navigates to realtime.
+   *
+   * @param {string} provider - 'google' or 'github'
+   * @returns {Promise<void>}
+   */
+  const handleSocialLogin = async (provider: 'google' | 'github') => {
+    try {
+      await socialLogin(provider);  // Usa store
+      onAuth?.();
+      setMsg("Inicio de sesión exitoso.");
+      setMsgType("success");
+      navigate("/realtime");
+    } catch (e: any) {
+      setMsg(e.message || "Error en login social.");
+      setMsgType("error");
+    }
+  };
 
   /**
    * Add a page-level class while the component is mounted for styling.
@@ -121,25 +144,20 @@ export default function Login({ onAuth }: Props) {
             />
           </div>
 
-          <button type="submit" className="login-button" aria-label="Ingresar a tu cuenta">
+          <button type="submit" className="login-button" disabled={isLoading} aria-label="Ingresar a tu cuenta">
             Ingresar
           </button>
           
           <div className="social-row" aria-hidden>
-            <a className="social-btn" href="/auth/google" aria-label="Iniciar sesión con Google">
+            <button className="social-btn" onClick={() => handleSocialLogin('google')} disabled={isLoading} aria-label="Iniciar sesión con Google">
               <img src="/google.png" alt="Google" />
               <span>Google</span>
-            </a>
+            </button>
 
-            <a className="social-btn" href="/auth/facebook" aria-label="Iniciar sesión con Facebook">
-              <img src="/faceb.png" alt="Facebook" />
-              <span>Facebook</span>
-            </a>
-            
-            <a className="social-btn" href="/auth/github" aria-label="Iniciar sesión con GitHub">
+            <button className="social-btn" onClick={() => handleSocialLogin('github')} disabled={isLoading} aria-label="Iniciar sesión con GitHub">
               <img src="/github.png" alt="GitHub" />
               <span>GitHub</span>
-            </a>
+            </button>
           </div>
         </form>
 

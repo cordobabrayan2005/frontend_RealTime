@@ -14,6 +14,7 @@ import Sitemap from "./components/Sitemap";
 import { api } from "./services/api";
 import Profile from "./pages/Profile";
 import VideoCall from "./pages/Videocall";
+import { useAuthStore } from './stores/authStore';  // Nuevo
 
 /**
  * The `App` function in this TypeScript React component manages authentication state, routing, and
@@ -35,7 +36,10 @@ function Shell() {
   // Show sitemap on all pages except the VideoCall route
   const showSitemap = location.pathname !== '/videocall';
 
+  const { isAuthed, logout, checkAuth } = useAuthStore();  // Nuevo
+
   useEffect(() => {
+    checkAuth();  // Verifica auth al cargar
     function onToggle() {
       setSidebarOpen((s) => !s);
     }
@@ -48,19 +52,14 @@ function Shell() {
   }
 
   function handleLogout() {
-    try {
-      api.logout();
-    } catch (e) {
-      // ignore
-    }
+    logout();  // Usa store
     handleClose();
     navigate("/login");
   }
 
   return (
     <div className={`app ${sidebarOpen ? "sidebar-open" : ""}`}>
-      <Sidebar isOpen={sidebarOpen} onClose={handleClose} onLogout={handleLogout} />
-
+      <Sidebar isOpen={sidebarOpen} onClose={handleClose} onLogout={handleLogout} isAuthed={isAuthed} />
       <main className="container">
         <Routes>
           <Route path="/" element={<Navigate to="/login" />} />

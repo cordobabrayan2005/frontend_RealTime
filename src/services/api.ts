@@ -93,5 +93,14 @@ export const api = {
     }
     throw new Error('El endpoint para cambiar contraseña con la sesión no está implementado en el backend');
   },
+  socialLogin: async (idToken: string, provider: string) => {
+    const result = await request('/api/login-social', { 
+      method: 'POST', 
+      body: JSON.stringify({ idToken, provider }) 
+    });
+    if (result?.token) localStorage.setItem('token', result.token);
+    return result;
+  },
 };
+
 export default api;
