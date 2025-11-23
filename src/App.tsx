@@ -28,18 +28,40 @@ export default function App() {
   );
 }
 
+/**
+ * Shell component that manages:
+ * - Sidebar state (open/close).
+ * - Authentication state via `useAuthStore`.
+ * - Routing between pages.
+ * - Conditional rendering of the sitemap.
+ * 
+ * @component
+ * @returns {JSX.Element} The main application shell with sidebar, routes, and sitemap.
+ */
 function Shell() {
+    /** Sidebar open/close state */
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    /** React Router navigation hook */
   const navigate = useNavigate();
+
+    /** React Router location hook */
   const location = useLocation();
   
   // Show sitemap on all pages except the VideoCall route
   const showSitemap = location.pathname !== '/videocall';
 
-  const { isAuthed, logout, checkAuth } = useAuthStore();  // Nuevo
+    /** Authentication store values and actions */
+  const { isAuthed, logout, checkAuth } = useAuthStore();  
 
+  /**
+   * Effect hook:
+   * - Verifies authentication on app load.
+   * - Registers a custom `toggleSidebar` event listener.
+   * - Cleans up the event listener on unmount.
+   */
   useEffect(() => {
-    checkAuth();  // Verifica auth al cargar
+    checkAuth();  // Verify authentication on load
     function onToggle() {
       setSidebarOpen((s) => !s);
     }
@@ -47,12 +69,24 @@ function Shell() {
     return () => window.removeEventListener("toggleSidebar", onToggle as EventListener);
   }, []);
 
+  /**
+   * Closes the sidebar.
+   * 
+   * @function handleClose
+   * @returns {void}
+   */
   function handleClose() {
     setSidebarOpen(false);
   }
 
+  /**
+   * Logs out the user, closes the sidebar, and navigates to the login page.
+   * 
+   * @function handleLogout
+   * @returns {void}
+   */
   function handleLogout() {
-    logout();  // Usa store
+    logout();  // Clear auth state
     handleClose();
     navigate("/login");
   }

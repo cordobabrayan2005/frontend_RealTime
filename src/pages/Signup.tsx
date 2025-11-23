@@ -3,34 +3,82 @@ import React, { useState, useEffect } from "react";
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
 
+/**
+ * Signup component that renders a registration form for new users.
+ * 
+ * Features:
+ * - Collects personal information (name, lastname, age).
+ * - Collects login credentials (email, password, confirm password).
+ * - Validates age (must be >= 18).
+ * - Validates password confirmation.
+ * - Submits data to the signup API.
+ * - Displays success or error messages.
+ * - Adds/removes a CSS class to the body for styling.
+ * 
+ * @component
+ * @returns {JSX.Element} The signup page UI.
+ */
 export default function Signup() {
+
+   /**
+   * Form state containing user input values.
+   */
   const [form, setForm] = useState({
     name: "",
     lastname: "",
-    age: "",  // Cambiado de birthdate
+    age: "", 
     email: "",
     password: "",
     confirmPassword: ""
   });
+
+  /**
+   * Message displayed to the user after validation or API response.
+   */
   const [msg, setMsg] = useState("");
+
+  /**
+   * Type of message displayed (success, error, info).
+   */
   const [msgType, setMsgType] = useState<"success" | "error" | "info">("info");
 
+  /**
+   * Adds a CSS class to the body when the component mounts,
+   * and removes it when the component unmounts.
+   */
   useEffect(() => {
     document.body.classList.add("login-page");
     return () => document.body.classList.remove("login-page");
   }, []);
 
+   /**
+   * Updates a specific field in the form state.
+   * 
+   * @template K
+   * @param {K} k - The key of the form field to update.
+   * @param {any} v - The new value for the field.
+   */
   function set<K extends keyof typeof form>(k: K, v: any) {
     setForm({ ...form, [k]: v });
   }
 
+  /**
+   * Handles form submission.
+   * Validates age and password confirmation before sending data to the API.
+   * 
+   * @async
+   * @param {React.FormEvent} e - The form submission event.
+   * @returns {Promise<void>} Resolves when the signup process completes.
+   */
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Age validation
     if (Number(form.age) < 18 || isNaN(Number(form.age))) {
       setMsg("Debes tener al menos 18 años para registrarte.");
       setMsgType("error");
       return;
     }
+    // Password confirmation validation
     if (form.password !== form.confirmPassword) {
       setMsg("Las contraseñas no coinciden.");
       setMsgType("error");
@@ -40,7 +88,7 @@ export default function Signup() {
       const formData = {
         name: form.name,
         lastname: form.lastname,
-        age: Number(form.age),  // Enviar como número
+        age: Number(form.age),  // Send as number
         email: form.email,
         password: form.password,
         confirmPassword: form.confirmPassword
