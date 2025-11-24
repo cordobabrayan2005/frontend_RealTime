@@ -5,22 +5,25 @@ import { api } from "../services/api";
 export default function Profile() {
   const [me, setMe] = useState<any>(null);
   const [msg, setMsg] = useState("");
-  const [editing, setEditing] = useState(false); // Para alternar edición
+  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     name: "",
     lastname: "",
     age: "",
+    email: ""
   });
   const navigate = useNavigate();
 
   async function load() {
     try {
       const data = await api.me();
+      console.log("Datos recibidos:", data);
       setMe(data);
       setForm({
         name: data.name || "",
         lastname: data.lastname || "",
         age: data.age || "",
+        email: data.email || ""
       });
     } catch (e: any) {
       setMsg(e.message);
@@ -31,8 +34,8 @@ export default function Profile() {
     load();
   }, []);
 
-  function set<K extends keyof typeof form>(k: K, v: any) {
-    setForm({ ...form, [k]: v });
+  function set<K extends keyof typeof form>(key: K, value: any) {
+    setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   async function save() {
@@ -41,10 +44,11 @@ export default function Profile() {
         name: form.name,
         lastname: form.lastname,
         age: Number(form.age),
+        email: form.email,
       });
       setMe(updated);
       setMsg("Perfil actualizado correctamente ✅");
-      setEditing(false); // Salir de edición
+      setEditing(false);
     } catch (e: any) {
       setMsg(e.message);
     }
@@ -57,6 +61,7 @@ export default function Profile() {
       await api.deleteMe();
       api.logout();
       setMsg("Cuenta eliminada.");
+      navigate("/login");
     } catch (e: any) {
       setMsg(e.message);
     }
@@ -127,30 +132,24 @@ export default function Profile() {
           <div className="profile-right">
             <div className="actions-card">
               <button className="btn primary save-btn" onClick={editing ? save : () => setEditing(true)}>
-                <span>{editing ? "Guardar cambios" : "Editar perfil"}</span>
+                {editing ? "Guardar cambios" : "Editar perfil"}
               </button>
 
               <div className="actions-list">
                 <button className="action-item" onClick={kill}>
-                  <span className="action-icon">🗑️</span>
-                  <span>Eliminar cuenta</span>
+                  🗑️ Eliminar cuenta
                 </button>
 
                 <button className="action-item logout" onClick={() => { api.logout(); navigate('/login'); }}>
-                  <span className="action-icon">🔌</span>
-                  <span>Cerrar sesión</span>
+                  🔌 Cerrar sesión
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        {msg && (
-          <p id="profile-message" className="profile-message" role="status">
-            {msg}
-          </p>
-        )}
+        {msg && <p role="status" className="profile-message">{msg}</p>}
       </div>
     </section>
   );
-}
+};
