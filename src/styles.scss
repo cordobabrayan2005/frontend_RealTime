@@ -78,7 +78,6 @@ body.login-page {
 	.login-card,
 	.signup-card,
 	.forgot-card { max-width: 100%; box-shadow: none; padding: 1.4rem 1.1rem; }
-.rt-flash { text-align:center; color:$primary; font-weight:700; margin: 0 0 10px; }
 	.login-title { font-size: 1.4rem; }
 }
 
@@ -418,6 +417,10 @@ select:-webkit-autofill {
 	align-items: center;
 	text-align: center;
 }
+.rt-flash { font-weight:700; margin:0 0 14px; }
+.rt-flash.success { color:#60a5fa; }
+.rt-flash.error { color:#dc2626; }
+.rt-flash.info { color:$primary; }
 
 /* Sidebar styles for the hamburger menu */
 .sidebar-overlay {
@@ -730,7 +733,9 @@ select:-webkit-autofill {
 	background: #ffffff;
 	border-radius: 46px;
 	padding: 34px 36px 30px;
-	width: min(980px, 94vw);
+	/* Keep white card width related to inner gray panel (720px) */
+	/* 720px panel + ~80px side breathing space = ~880px card */
+	width: min(580px, 94vw);
 	margin: 0 auto;
 	box-shadow: 0 12px 30px rgba(16,24,40,0.06);
 	position: relative;
