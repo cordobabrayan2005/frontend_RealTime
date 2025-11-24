@@ -14,6 +14,46 @@ if (!ENV_BASE) {
 }
 const BASE = ENV_BASE;
 
+function friendlyError(status: number, data: any): string {
+  const raw = (data && typeof data === 'object') ? (data.error || data.message) : (typeof data === 'string' ? data : '');
+  const text = (raw || '').toString();
+  // Normalize for comparisons
+  const t = text.toLowerCase();
+
+  // Common mappings from backend controller
+  if (status === 400) {
+    if (t.includes('todos los campos son requeridos')) return 'Completa todos los campos.';
+    if (t.includes('contraseñas no coinciden')) return 'Las contraseñas no coinciden.';
+    if (t.includes('email y contraseña son requeridos')) return 'Ingresa email y contraseña.';
+    if (t.includes('token y nueva contraseña son requeridos')) return 'Falta información para restablecer la contraseña.';
+    if (t.includes('email es requerido')) return 'Ingresa tu correo electrónico.';
+    return 'Solicitud inválida. Revisa los datos ingresados.';
+  }
+  if (status === 401) {
+    if (t.includes('usuario no autenticado')) return 'Tu sesión expiró. Inicia sesión nuevamente.';
+    if (t.includes('credenciales inválidas') || t.includes('email o contraseña incorrectos')) return 'Email o contraseña incorrectos.';
+    return 'No autorizado. Inicia sesión para continuar.';
+  }
+  if (status === 403) {
+    if (t.includes('deshabilitada')) return 'Tu cuenta está deshabilitada.';
+    if (t.includes('verificar tu correo')) return 'Verifica tu correo para iniciar sesión.';
+    if (t.includes('no registrado')) return 'No hay una cuenta asociada a ese correo. Regístrate primero.';
+    return 'Acceso denegado.';
+  }
+  if (status === 404) {
+    if (t.includes('usuario no encontrado')) return 'No encontramos tu perfil.';
+    return 'Recurso no encontrado.';
+  }
+  if (status === 409) {
+    if (t.includes('correo ya está registrado') || t.includes('ya está registrado')) return 'Este correo ya está registrado.';
+    return 'Conflicto con los datos enviados.';
+  }
+  if (status >= 500) {
+    return 'Ocurrió un error del servidor. Inténtalo más tarde.';
+  }
+  return text || 'Error en la petición';
+}
+
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   // Normalize headers: options.headers may be a Headers instance or object
@@ -56,9 +96,14 @@ async function request(path: string, options: RequestInit = {}) {
   }
 
   if (!res.ok) {
-    // Corrección: Agregar undefined en la línea de error
-    const message = (data && typeof data === 'object' && (data.message || data.error)) || res.statusText || (typeof data === 'string' ? data : undefined);
+    const message = friendlyError(res.status, data);
     console.error('[api] ERROR RESPONSE', { url: `${BASE}${path}`, status: res.status, data });
+    if (res.status === 401) {
+      // sesión no válida: limpiar token para forzar reautenticación
+      try { localStorage.removeItem('token'); } catch {}
+      // Emitir evento opcional para que la app pueda reaccionar si lo desea
+      try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
+    }
     throw new Error(message || 'Error en la petición');
   }
 
@@ -73,9 +118,10 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 export const api = {
-  signup: async (data: AnyObj) => request('/api/register', { method: 'POST', body: JSON.stringify(data) }),
+  // IMPORTANTE: Como BASE ya termina en /api, no repetir /api en cada path
+  signup: async (data: AnyObj) => request('/register', { method: 'POST', body: JSON.stringify(data) }),
   login: async (email: string, password: string) => {
-    const result = await request('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    const result = await request('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     if (result?.token) localStorage.setItem('token', result.token);
     return result;
   },
@@ -83,20 +129,27 @@ export const api = {
     localStorage.removeItem('token');
     return { ok: true };
   },
-  me: async () => request('/api/profile', { method: 'GET' }),
-  updateMe: async (data: AnyObj) => request('/api/profile', { method: 'PUT', body: JSON.stringify(data) }),
-  deleteMe: async () => request('/api/profile', { method: 'DELETE' }),
-  forgot: async (email: string) => request('/api/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  me: async () => {
+    const res = await request('/profile', { method: 'GET' });
+    // Backend devuelve { user: { ... } }
+    return (res && typeof res === 'object' && 'user' in res) ? (res as AnyObj).user : res;
+  },
+  updateMe: async (data: AnyObj) => {
+    const res = await request('/profile', { method: 'PUT', body: JSON.stringify(data) });
+    return (res && typeof res === 'object' && 'user' in res) ? (res as AnyObj).user : res;
+  },
+  deleteMe: async () => request('/profile', { method: 'DELETE' }),
+  forgot: async (email: string) => request('/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
   reset: async (token: string, password: string) =>
-    request('/api/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword: password }) }),
+    request('/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword: password }) }),
   changePassword: async (currentPassword: string, newPassword: string, token?: string) => {
     if (token) {
-      return request('/api/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) });
+      return request('/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) });
     }
     throw new Error('El endpoint para cambiar contraseña con la sesión no está implementado en el backend');
   },
   socialLogin: async (idToken: string, provider: string) => {
-    const result = await request('/api/login-social', {
+    const result = await request('/login-social', {
       method: 'POST',
       body: JSON.stringify({ idToken, provider })
     });

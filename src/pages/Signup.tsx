@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
+import { useNavigate } from "react-router-dom";
 
 /**
  * Signup component that renders a registration form for new users.
@@ -41,6 +42,8 @@ export default function Signup() {
    * Type of message displayed (success, error, info).
    */
   const [msgType, setMsgType] = useState<"success" | "error" | "info">("info");
+
+  const navigate = useNavigate();
 
   /**
    * Adds a CSS class to the body when the component mounts,
@@ -94,8 +97,9 @@ export default function Signup() {
         confirmPassword: form.confirmPassword
       };
       await api.signup(formData);
-      setMsg("Cuenta creada. Ahora puedes iniciar sesión.");
+      setMsg("Cuenta creada correctamente. Inicia sesión para continuar.");
       setMsgType("success");
+      navigate("/login");
     } catch (e: any) {
       setMsg(e.message || "Error al crear la cuenta.");
       setMsgType("error");

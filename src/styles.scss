@@ -326,6 +326,16 @@ select:-webkit-autofill {
 	text-decoration: underline;
 }
 
+/* Unified status messages on auth pages */
+.login-message {
+	margin-top: 12px;
+	text-align: center;
+	font-weight: 700;
+}
+.login-message.error { color: #dc2626; } /* rojo */
+.login-message.success { color: #16a34a; } /* verde de confirmación */
+.login-message.info { color: $primary; }
+
 /* Social sign-in buttons under the auth form */
 .social-row {
 	display: flex;
@@ -747,4 +757,27 @@ select:-webkit-autofill {
 @media (max-width: 768px) {
 	.sitemap-container { padding: 0 1rem; }
 }
+
+/* Loading screen for profile */
+.profile-loading {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-height: 100vh;
+	gap: 18px;
+	font-weight: 600;
+	color: $primary;
+	text-align: center;
+}
+.profile-loading .spinner {
+	width: 58px;
+	height: 58px;
+	border: 6px solid #dbeafe;
+	border-top-color: $primary;
+	border-radius: 50%;
+	animation: spin .85s linear infinite;
+	box-sizing: border-box;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 

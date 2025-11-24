@@ -15,6 +15,7 @@ import { api } from "./services/api";
 import Profile from "./pages/Profile";
 import VideoCall from "./pages/Videocall";
 import { useAuthStore } from './stores/authStore';  // Nuevo
+import ProtectedRoute from "./components/ProtectedRoute";
 
 /**
  * The `App` function in this TypeScript React component manages authentication state, routing, and
@@ -101,10 +102,10 @@ function Shell() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot" element={<Forgot />} />
           <Route path="/reset" element={<Reset />} />
-          <Route path="/realtime" element={<RealTime />} />
+          <Route path="/realtime" element={<ProtectedRoute><RealTime /></ProtectedRoute>} />
           <Route path="/about" element={<About />} />
-          <Route path="/videocall" element={<VideoCall />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/videocall" element={<ProtectedRoute><VideoCall /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/user-manual" element={<UserManual />} />
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>

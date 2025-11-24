@@ -1,7 +1,41 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
+import { useAuthStore } from "../stores/authStore";
 
+/**
+ * Shape of the profile data returned by the backend.
+ * @typedef {Object} ProfileData
+ * @property {string} [name]
+ * @property {string} [lastname]
+ * @property {string|number} [age]
+ * @property {string} [email]
+ */
+
+/**
+ * Profile page component.
+ *
+ * Responsibilities:
+ * - Obtiene datos del usuario autenticado vía `api.me()`.
+ * - Muestra un estado de carga centrado con spinner mientras se consulta el backend.
+ * - Permite editar y actualizar (PUT) los campos básicos del perfil.
+ * - Permite eliminar la cuenta y cerrar sesión.
+ * - Usa el store (`useAuthStore`) para mostrar datos inmediatamente si ya están en memoria.
+ *
+ * Estados:
+ * - `me`: Datos del perfil actuales (o null mientras carga).
+ * - `form`: Datos temporales para edición.
+ * - `editing`: Flag que habilita modo edición.
+ * - `msg`: Mensaje de retroalimentación (éxito / error).
+ *
+ * Accesibilidad:
+ * - Spinner con `role="status"` y `aria-live` para usuarios de lector.
+ * - Labels visibles asociadas a cada campo editable.
+ *
+ * Errores:
+ * - Si falla la carga inicial se coloca el mensaje en `msg`.
+ * - Si no hay token se solicita inicio de sesión.
+ */
 export default function Profile() {
   const [me, setMe] = useState<any>(null);
   const [msg, setMsg] = useState("");
@@ -13,7 +47,13 @@ export default function Profile() {
     email: ""
   });
   const navigate = useNavigate();
+  const { user, token, isAuthed } = useAuthStore();
 
+  /**
+   * Carga los datos de perfil desde el backend y sincroniza el formulario.
+   * @async
+   * @returns {Promise<void>}
+   */
   async function load() {
     try {
       const data = await api.me();
@@ -31,13 +71,35 @@ export default function Profile() {
   }
 
   useEffect(() => {
+    // Si ya tenemos usuario en store, mostrarlo inmediatamente para evitar flash.
+    if (user && !me) {
+      setMe(user);
+      setForm({
+        name: user.name || "",
+        lastname: user.lastname || "",
+        age: String(user.age || ""),
+        email: user.email || ""
+      });
+    }
+    // Siempre intentar sincronizar con backend evitando datos stale.
     load();
   }, []);
 
+  /**
+   * Actualiza un campo específico del formulario de edición.
+   * @template K
+   * @param {K} key Clave del campo a actualizar.
+   * @param {any} value Nuevo valor del campo.
+   */
   function set<K extends keyof typeof form>(key: K, value: any) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  /**
+   * Envía cambios del formulario al backend (PUT /profile).
+   * @async
+   * @returns {Promise<void>}
+   */
   async function save() {
     try {
       const updated = await api.updateMe({
@@ -54,6 +116,12 @@ export default function Profile() {
     }
   }
 
+  /**
+   * Elimina la cuenta del usuario actual (DELETE /profile) tras confirmación.
+   * Limpia sesión y redirige a /login.
+   * @async
+   * @returns {Promise<void>}
+   */
   async function kill() {
     const confirmDelete = window.confirm('¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');
     if (!confirmDelete) return;
@@ -67,8 +135,21 @@ export default function Profile() {
     }
   }
 
-  if (!localStorage.getItem("token")) return <p>Por favor inicia sesión primero.</p>;
-  if (!me) return <p>Cargando perfil...</p>;
+  const hasToken = !!localStorage.getItem("token") || !!token;
+  if (!hasToken && !isAuthed) {
+    console.warn('[Profile] No token encontrado en localStorage ni store');
+    return (
+      <div className="profile-loading">
+        <p>Por favor inicia sesión primero.</p>
+      </div>
+    );
+  }
+  if (!me) return (
+    <div className="profile-loading" role="status" aria-live="polite" aria-label="Cargando perfil">
+      <div className="spinner" aria-hidden="true" />
+      <p>Cargando perfil...</p>
+    </div>
+  );
 
   return (
     <section className="profile-page" role="region" aria-labelledby="profile-title" lang="es">

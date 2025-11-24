@@ -79,9 +79,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const result = await api.login(email, password);
-      set({ user: result.user, token: result.token, isAuthed: true, isLoading: false });
+      let user = result.user;
+      // Si el backend no devuelve user en login, intentar obtenerlo vía /profile
+      if (!user) {
+        try {
+          user = await api.me();
+        } catch (e) {
+          /* ignorar error de perfil, se puede reintentar en Profile */
+        }
+      }
+      set({ user: user || null, token: result.token, isAuthed: true, isLoading: false });
     } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+      // Propaga el error para que la UI no navegue como si fuera éxito
+      set({ error: err.message, isLoading: false, isAuthed: false });
+      throw err;
     }
   },
 
@@ -104,7 +115,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const backendResult = await api.socialLogin(idToken, provider);
       set({ user: backendResult.user, token: backendResult.token, isAuthed: true, isLoading: false });
     } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+      set({ error: err.message, isLoading: false, isAuthed: false });
+      throw err;
     }
   },
 
