@@ -16,25 +16,25 @@ import { useAuthStore } from "../stores/authStore";
  * Profile page component.
  *
  * Responsibilities:
- * - Obtiene datos del usuario autenticado vía `api.me()`.
- * - Muestra un estado de carga centrado con spinner mientras se consulta el backend.
- * - Permite editar y actualizar (PUT) los campos básicos del perfil.
- * - Permite eliminar la cuenta y cerrar sesión.
- * - Usa el store (`useAuthStore`) para mostrar datos inmediatamente si ya están en memoria.
+ * - Fetches the authenticated user's data via `api.me()`.
+ * - Shows a centered loading state with a spinner while contacting the backend.
+ * - Allows editing and updating (PUT) the basic profile fields.
+ * - Allows deleting the account and logging out.
+ * - Uses the auth store (`useAuthStore`) to immediately show data if already in memory.
  *
- * Estados:
- * - `me`: Datos del perfil actuales (o null mientras carga).
- * - `form`: Datos temporales para edición.
- * - `editing`: Flag que habilita modo edición.
- * - `msg`: Mensaje de retroalimentación (éxito / error).
+ * State:
+ * - `me`: Current profile data (or null while loading).
+ * - `form`: Temporary values for editing.
+ * - `editing`: Flag to enable edit mode.
+ * - `msg`: Feedback message (success / error).
  *
- * Accesibilidad:
- * - Spinner con `role="status"` y `aria-live` para usuarios de lector.
- * - Labels visibles asociadas a cada campo editable.
+ * Accessibility:
+ * - Spinner with `role="status"` and `aria-live` for screen reader users.
+ * - Visible labels associated with each editable field.
  *
- * Errores:
- * - Si falla la carga inicial se coloca el mensaje en `msg`.
- * - Si no hay token se solicita inicio de sesión.
+ * Errors:
+ * - If the initial load fails, the error text is stored in `msg`.
+ * - If there is no token, a sign-in prompt is shown.
  */
 export default function Profile() {
   const [me, setMe] = useState<any>(null);
@@ -50,7 +50,7 @@ export default function Profile() {
   const { user, token, isAuthed } = useAuthStore();
 
   /**
-   * Carga los datos de perfil desde el backend y sincroniza el formulario.
+   * Loads the profile data from the backend and syncs the form state.
    * @async
    * @returns {Promise<void>}
    */
@@ -71,7 +71,7 @@ export default function Profile() {
   }
 
   useEffect(() => {
-    // Si ya tenemos usuario en store, mostrarlo inmediatamente para evitar flash.
+    // If we already have the user in the store, show it immediately to avoid a flash.
     if (user && !me) {
       setMe(user);
       setForm({
@@ -81,22 +81,22 @@ export default function Profile() {
         email: user.email || ""
       });
     }
-    // Siempre intentar sincronizar con backend evitando datos stale.
+    // Always attempt to sync with the backend to avoid stale data.
     load();
   }, []);
 
   /**
-   * Actualiza un campo específico del formulario de edición.
+   * Updates a specific field in the edit form.
    * @template K
-   * @param {K} key Clave del campo a actualizar.
-   * @param {any} value Nuevo valor del campo.
+   * @param {K} key Field key to update.
+   * @param {any} value New value for the field.
    */
   function set<K extends keyof typeof form>(key: K, value: any) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   /**
-   * Envía cambios del formulario al backend (PUT /profile).
+   * Submits form changes to the backend (PUT /profile).
    * @async
    * @returns {Promise<void>}
    */
@@ -109,7 +109,7 @@ export default function Profile() {
         email: form.email,
       });
       setMe(updated);
-      setMsg("Perfil actualizado correctamente ✅");
+      setMsg("Profile updated successfully ✅");
       setEditing(false);
     } catch (e: any) {
       setMsg(e.message);
@@ -117,18 +117,18 @@ export default function Profile() {
   }
 
   /**
-   * Elimina la cuenta del usuario actual (DELETE /profile) tras confirmación.
-   * Limpia sesión y redirige a /login.
+   * Deletes the current user's account (DELETE /profile) after confirmation.
+   * Clears the session and redirects to /login.
    * @async
    * @returns {Promise<void>}
    */
   async function kill() {
-    const confirmDelete = window.confirm('¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');
+    const confirmDelete = window.confirm('Are you sure you want to delete your account? This action cannot be undone.');
     if (!confirmDelete) return;
     try {
       await api.deleteMe();
       api.logout();
-      setMsg("Cuenta eliminada.");
+      setMsg("Account deleted.");
       navigate("/login");
     } catch (e: any) {
       setMsg(e.message);
@@ -137,17 +137,17 @@ export default function Profile() {
 
   const hasToken = !!localStorage.getItem("token") || !!token;
   if (!hasToken && !isAuthed) {
-    console.warn('[Profile] No token encontrado en localStorage ni store');
+    console.warn('[Profile] No token found in localStorage or store');
     return (
       <div className="profile-loading">
-        <p>Por favor inicia sesión primero.</p>
+        <p>Please sign in first.</p>
       </div>
     );
   }
   if (!me) return (
     <div className="profile-loading" role="status" aria-live="polite" aria-label="Cargando perfil">
       <div className="spinner" aria-hidden="true" />
-      <p>Cargando perfil...</p>
+      <p>Loading profile...</p>
     </div>
   );
 

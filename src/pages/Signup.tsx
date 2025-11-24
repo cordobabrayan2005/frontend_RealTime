@@ -97,9 +97,18 @@ export default function Signup() {
         confirmPassword: form.confirmPassword
       };
       await api.signup(formData);
-      setMsg("Cuenta creada correctamente. Inicia sesión para continuar.");
+      setMsg("Cuenta creada sin problemas. Inicia sesión para continuar.");
       setMsgType("success");
-      navigate("/login");
+      // Enviar mensaje flash al Login y redirigir
+      navigate("/login", {
+        state: {
+          flash: {
+            type: "success",
+            text: "Cuenta creada sin problemas. Inicia sesión para continuar.",
+          },
+        },
+        replace: true,
+      });
     } catch (e: any) {
       setMsg(e.message || "Error al crear la cuenta.");
       setMsgType("error");

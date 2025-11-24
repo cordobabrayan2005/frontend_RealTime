@@ -8,7 +8,7 @@
 
 // src/pages/Login.tsx
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuthStore } from '../stores/authStore';  // Nuevo
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
@@ -55,6 +55,7 @@ export default function Login({ onAuth }: Props) {
   const [msgType, setMsgType] = useState<"success" | "error" | "info">("info");
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, socialLogin, isLoading, error } = useAuthStore();  // Nuevo
 
   /**
@@ -109,6 +110,17 @@ export default function Login({ onAuth }: Props) {
     document.body.classList.add("login-page");
     return () => document.body.classList.remove("login-page");
   }, []);
+
+  // Mostrar mensaje de éxito si venimos de un registro
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.flash) {
+      setMsg(state.flash.text || "Cuenta creada sin problemas. Inicia sesión para continuar.");
+      setMsgType(state.flash.type || "success");
+      // Limpiar el estado de la navegación para evitar re-mostrar al retroceder
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
 
   return (
     <main className="auth-wrapper" role="main" aria-labelledby="login-title">

@@ -673,7 +673,28 @@ select:-webkit-autofill {
 	.profile-left h2 { margin: 0 0 8px; color: #111827; }
 	.profile-field { margin: 10px 0; }
 	.field-label { font-weight: 700; color: #111827; font-size: 0.86rem; }
+	/* Unificar tamaño visual entre inputs y valores de solo lectura */
 	.field-value { margin-top: 6px; color: #111827; opacity: 0.9; font-size: 0.95rem; }
+	.profile-field .field-input,
+	.profile-field .field-value {
+		width: 100%;
+		box-sizing: border-box;
+		background: $input-bg;
+		border: 1px solid $input-border;
+		border-radius: 8px;
+		min-height: 48px;
+		padding: 12px 14px;
+		display: flex;
+		align-items: center; /* centra verticalmente texto de solo lectura */
+	}
+
+	/* Asegurar que los inputs hereden tipografía y altura coherente */
+	.profile-field .field-input {
+		font-size: 0.97rem;
+		line-height: 1.2;
+		color: $label-color;
+		background: $input-bg;
+	}
 	.profile-divider { width: 1px; background: rgba(16,24,40,0.06); margin: 6px 0; }
 	.profile-right { flex: 1 1 auto; display:flex; align-items:center; justify-content:center; padding: 12px 8px; }
 	.actions-card { width: 100%; max-width: 340px; }
