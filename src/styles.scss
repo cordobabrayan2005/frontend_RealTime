@@ -5,6 +5,14 @@ $input-border: #e6e7ea;
 $primary: #1d4ed8; /* azul solicitado */
 $label-color: #303031;
 
+/* Responsive breakpoints */
+$bp-xs: 360px;
+$bp-sm: 480px;
+$bp-md: 640px;
+$bp-lg: 768px;
+$bp-xl: 1024px;
+$bp-2xl: 1280px;
+
 @use "sass:color";
 
 /* App layout styles */
@@ -50,6 +58,11 @@ body.login-page {
 	margin: 0 auto;
 }
 
+@media (max-width: $bp-sm) {
+	.auth-wrapper { padding: 1.25rem 1rem; }
+	.login-card, .signup-card, .forgot-card { padding: 1.75rem 1.5rem; }
+}
+
 .login-card,
 .signup-card,
 .forgot-card {
@@ -59,6 +72,13 @@ body.login-page {
 	padding: 2.25rem; /* algo más de espacio interior */
 	width: 100%;
 	max-width: 360px;
+}
+
+@media (max-width: $bp-xs) {
+	.login-card,
+	.signup-card,
+	.forgot-card { max-width: 100%; box-shadow: none; padding: 1.4rem 1.1rem; }
+	.login-title { font-size: 1.4rem; }
 }
 
 .logo-image.large {
@@ -377,6 +397,13 @@ select:-webkit-autofill {
 	box-sizing: border-box;
 }
 
+@media (max-width: $bp-lg) {
+	.realtime-container { padding: 2.25rem 16px; }
+}
+@media (max-width: $bp-sm) {
+	.realtime-container { padding: 1.75rem 12px; }
+}
+
 /* card within realtime landing - keep content narrower and centered */
 .realtime-container .realtime-card {
 	width: 100%;
@@ -538,6 +565,23 @@ select:-webkit-autofill {
   margin: 16px auto;
   align-items: stretch;
 }
+.vc-grid.compact { gap: 32px; }
+
+@media (max-width: $bp-xl) {
+	.vc-grid { gap: 48px; }
+}
+@media (max-width: $bp-lg) {
+	.vc-grid { gap: 40px; }
+}
+@media (max-width: $bp-md) {
+	.vc-grid { gap: 30px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+@media (max-width: $bp-sm) {
+	.vc-grid { gap: 22px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+}
+@media (max-width: $bp-xs) {
+	.vc-grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+}
 .vc-grid.single { display:flex; justify-content:center; align-items:center; }
 .vc-grid.single .vc-card { width: 520px; height: 360px; border-radius: 28px; max-width: $narrow-max; }
 .vc-grid.single .vc-avatar { width: 160px; height: 160px; font-size: 48px; }
@@ -584,6 +628,10 @@ select:-webkit-autofill {
 	.vc-avatar { width: 64px; height: 64px; font-size: 16px; }
 	.vc-controls { gap: 12px; }
 	.vc-control { width:54px; height:54px; }
+}
+
+@media (max-width: $bp-xs) {
+	.vc-control { width:50px; height:50px; font-size:20px; }
 }
 
 /* Chat panel styles */
@@ -642,6 +690,12 @@ select:-webkit-autofill {
 		.profile-divider { display: none; }
 		.profile-right { padding-top: 8px; }
 	}
+
+@media (max-width: $bp-sm) {
+	.profile-page { padding: 1.5rem 1rem; }
+	.profile-card.modal-like { padding: 1.1rem 0.9rem; border-radius: 16px; }
+	.actions-card { max-width: 100%; }
+}
 
 /* User manual styles - match the app's card/white-panel aesthetic */
 .user-manual {
@@ -708,6 +762,11 @@ select:-webkit-autofill {
 	.manual-header { text-align: center; }
 }
 
+@media (max-width: $bp-sm) {
+	.user-manual { padding: 1.75rem 1rem; }
+	.manual-content { padding: 1.25rem 1rem; }
+}
+
 /* Sitemap Styles */
 .sitemap {
 	background: #f8fafc;
@@ -735,6 +794,10 @@ select:-webkit-autofill {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 	gap: 1.25rem;
+}
+
+@media (max-width: $bp-sm) {
+	.sitemap-columns { gap: 0.85rem; }
 }
 
 .sitemap-col h4 {
@@ -780,4 +843,20 @@ select:-webkit-autofill {
 	box-sizing: border-box;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* General fluid adjustments */
+@media (min-width: $bp-2xl) {
+	.auth-wrapper { max-width: 880px; }
+	.realtime-container .realtime-card { max-width: 880px; }
+}
+
+@media (max-width: $bp-sm) {
+	.form-row { flex-direction: column; gap: 0; }
+	.form-col { width: 100%; }
+}
+
+/* Sidebar responsive: optionally keep it docked on very wide screens */
+@media (min-width: 1280px) {
+	.sidebar { position: fixed; }
+}
 
