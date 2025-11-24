@@ -75,7 +75,7 @@ export default function Login({ onAuth }: Props) {
       onAuth?.();
       setMsg("Inicio de sesión exitoso.");
       setMsgType("success");
-      navigate("/realtime");
+      navigate("/realtime", { state: { flash: { type: "success", text: "Bienvenido a RealTime" } } });
     } catch (e: any) {
       setMsg(e.message || "Error al iniciar sesión.");
       setMsgType("error");
@@ -96,7 +96,7 @@ export default function Login({ onAuth }: Props) {
       onAuth?.();
       setMsg("Inicio de sesión exitoso.");
       setMsgType("success");
-      navigate("/realtime");
+      navigate("/realtime", { state: { flash: { type: "success", text: "Bienvenido a RealTime" } } });
     } catch (e: any) {
       setMsg(e.message || "Error en login social.");
       setMsgType("error");

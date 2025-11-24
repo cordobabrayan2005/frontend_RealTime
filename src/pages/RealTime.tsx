@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 /**
  * RealTime page component.
@@ -19,6 +19,18 @@ export default function RealTime() {
   /** Current room code typed by the user. */
   const [roomCode, setRoomCode] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+  const [flash, setFlash] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
+
+  // Read welcome flash message from navigation state (once)
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.flash) {
+      setFlash(state.flash);
+      // Clear state so it doesn't persist on back/forward
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   /**
    * Toggle visibility of the room code input.
@@ -64,6 +76,11 @@ export default function RealTime() {
         <span />
       </button>
       <section className="realtime-card" aria-describedby="rt-actions">
+        {flash?.text && (
+          <p role="status" aria-live="polite" className={`rt-flash ${flash.type}`}>
+            {flash.text}
+          </p>
+        )}
         <div className="logo-box" style={{ background: '#fff', padding: '2.25rem', borderRadius: 8, boxShadow: '0 6px 20px rgba(16,24,40,0.04)', marginBottom: 24 }}>
           <img src="/RealTime.png" alt="RealTime" className="logo-image large" />
         </div>

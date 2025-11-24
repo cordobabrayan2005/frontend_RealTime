@@ -78,6 +78,7 @@ body.login-page {
 	.login-card,
 	.signup-card,
 	.forgot-card { max-width: 100%; box-shadow: none; padding: 1.4rem 1.1rem; }
+.rt-flash { text-align:center; color:$primary; font-weight:700; margin: 0 0 10px; }
 	.login-title { font-size: 1.4rem; }
 }
 
@@ -716,6 +717,55 @@ select:-webkit-autofill {
 	.profile-page { padding: 1.5rem 1rem; }
 	.profile-card.modal-like { padding: 1.1rem 0.9rem; border-radius: 16px; }
 	.actions-card { max-width: 100%; }
+}
+
+/* Reusable buttons (global) */
+.btn { display:inline-flex; align-items:center; justify-content:center; min-width:160px; padding:0.6rem 1rem; border-radius:12px; border:1px solid transparent; cursor:pointer; font-weight:600; transition:background .2s, box-shadow .2s, transform .05s, filter .15s; }
+.btn.primary { background:$primary; color:#fff; box-shadow:0 6px 14px rgba(29,78,216,0.18); }
+.btn.primary:hover { filter:brightness(0.96); }
+.btn.primary:active { transform:translateY(1px); }
+
+/* New profile design */
+.profile-card-new {
+	background: #ffffff;
+	border-radius: 46px;
+	padding: 34px 36px 30px;
+	width: min(980px, 94vw);
+	margin: 0 auto;
+	box-shadow: 0 12px 30px rgba(16,24,40,0.06);
+	position: relative;
+	display:flex;
+	flex-direction:column;
+	gap: 26px;
+}
+.profile-header-row { position:relative; min-height:42px; }
+.profile-close { position:absolute; left:22px; top:18px; right:auto !important; background:transparent; border:none; font-size:26px; cursor:pointer; }
+.profile-logout-link { position:absolute; top:22px; right:32px; background: transparent; border:none; color:#b91c1c; font-weight:600; cursor:pointer; font-size:0.9rem; padding:4px 6px; }
+.profile-logout-link:hover { text-decoration:underline; }
+.profile-panel { background:#d9dde2; border-radius:18px; padding:26px 30px; max-width: 720px; margin: 0 auto; border:1px solid rgba(17,24,39,0.06); box-shadow:0 2px 8px rgba(17,24,39,0.04); }
+.profile-columns { display:flex; gap: 40px; }
+.profile-col { flex:1; display:flex; flex-direction:column; gap: 12px; }
+.profile-col-left h2 { margin:0 0 12px; font-size: 1rem; font-weight:700; }
+.profile-block { display:flex; flex-direction:column; gap:4px; }
+.mini-label { font-weight:700; font-size:0.82rem; color:#111827; text-transform:none; }
+.mini-value { font-size:0.78rem; color:#111827; opacity:0.9; font-weight:500; }
+.profile-edit-input { padding:6px 10px; border-radius:8px; border:1px solid $input-border; background:#fff; font-size:0.8rem; }
+.password-placeholder { width:120px; height:14px; border-bottom:1px solid #111827; opacity:0.7; }
+.password-view-wrap { display:flex; flex-direction:column; gap:6px; }
+.password-view-btn { align-self:flex-start; background:transparent; border:none; color:$primary; font-size:0.7rem; cursor:pointer; font-weight:600; padding:0; }
+.password-view-btn:hover { text-decoration:underline; }
+.password-obfuscated { font-family: monospace; letter-spacing: 2px; }
+.profile-actions-row { display:flex; align-items:center; justify-content:center; gap: 28px; margin-top:4px; flex-wrap:wrap; }
+.profile-save-btn { max-width:240px; border-radius:12px; font-size:0.9rem; }
+.profile-delete-btn { background:transparent; border:none; color:#b91c1c; font-weight:600; cursor:pointer; font-size:0.85rem; }
+.profile-message-alt { text-align:center; font-weight:600; color:$primary; margin-top:4px; }
+
+@media (max-width: $bp-lg) {
+	.profile-columns { flex-direction:column; gap:24px; }
+}
+@media (max-width: $bp-sm) {
+	.profile-card-new { padding:26px 22px 26px; border-radius:38px; }
+	.profile-panel { padding:24px 22px; }
 }
 
 /* User manual styles - match the app's card/white-panel aesthetic */
