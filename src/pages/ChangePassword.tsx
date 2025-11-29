@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
+import { validatePasswordRules } from "../utils/passwordRules";
 
 /**
  * ChangePassword component.
@@ -64,7 +65,11 @@ export default function ChangePassword() {
    */
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (newPassword.length < 6) return setMsg("La contraseña debe tener al menos 6 caracteres.");
+    const { valid, message } = validatePasswordRules(newPassword);
+    if (!valid) {
+      setMsg(message || "La contraseña no cumple los requisitos de seguridad.");
+      return;
+    }
     if (newPassword !== confirmPassword) return setMsg("Las contraseñas no coinciden.");
     try {
       await api.changePassword(currentPassword, newPassword, confirmPassword);

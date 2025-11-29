@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
 import { useNavigate } from "react-router-dom";
+import { validatePasswordRules } from "../utils/passwordRules";
 
 /**
  * Signup component that renders a registration form for new users.
@@ -78,6 +79,12 @@ export default function Signup() {
     // Age validation
     if (Number(form.age) < 18 || isNaN(Number(form.age))) {
       setMsg("Debes tener al menos 18 años para registrarte.");
+      setMsgType("error");
+      return;
+    }
+    const { valid, message } = validatePasswordRules(form.password);
+    if (!valid) {
+      setMsg(message || "La contraseña no cumple los requisitos de seguridad.");
       setMsgType("error");
       return;
     }

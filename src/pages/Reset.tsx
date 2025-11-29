@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import PasswordField from "../components/PasswordField";
+import { validatePasswordRules } from "../utils/passwordRules";
 
 /**
  * @typedef {Object} Participant
@@ -55,10 +56,10 @@ export default function Reset() {
   /**
    * Form submit handler.
    *
-   * Performs client-side validation:
-   *  - ensures a token is present
-   *  - enforces a minimum password length
-   *  - checks password and confirmation match
+  * Performs client-side validation:
+  *  - ensures a token is present
+  *  - valida que la contraseña cumpla letras, dígitos y símbolos requeridos
+  *  - checks password and confirmation match
    *
    * On success it calls api.reset(token, password, confirm) and then redirects
    * to the login page after a short delay.
@@ -75,8 +76,9 @@ export default function Reset() {
       setMsgType("error");
       return;
     }
-    if (password.length < 6) {
-      setMsg("La contraseña debe tener al menos 6 caracteres.");
+    const { valid, message } = validatePasswordRules(password);
+    if (!valid) {
+      setMsg(message || "La contraseña no cumple los requisitos de seguridad.");
       setMsgType("error");
       return;
     }
