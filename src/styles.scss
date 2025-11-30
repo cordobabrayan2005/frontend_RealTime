@@ -1016,9 +1016,9 @@ select:-webkit-autofill {
 /* Notificacion para mensajes*/
 .vc-chat-notification {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -2px;  // Más cercano: de -5px a -2px (se superpone ligeramente arriba)
+  right: -2px;  // Más cercano: de -5px a -2px (se superpone ligeramente a la derecha)
   color: rgb(72, 255, 0);
-  font-size: 12px;
+  font-size: 16px;  // Más grande: de 12px a 16px
   font-weight: bold;
 }
