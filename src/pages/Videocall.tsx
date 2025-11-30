@@ -197,7 +197,7 @@ export default function VideoCall() {
         // If nothing is desired, ensure we release any existing stream
         if (!desiredVideo && !desiredAudio) {
           if (current) {
-            current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+            current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
             mediaStreamRef.current = null;
             if (localVideoRef.current) localVideoRef.current.srcObject = null;
           }
@@ -232,7 +232,7 @@ export default function VideoCall() {
 
         // Stop old tracks
         try {
-          current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+          current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
         } catch (e) { /* ignore */ }
 
         mediaStreamRef.current = newStream;
@@ -316,21 +316,21 @@ export default function VideoCall() {
 
       <section className={`vc-grid ${participants.length === 1 ? 'single' : ''}`} aria-live="polite">
         {participants.map((p) => (
-          <div key={p.id} className="vc-tile" role="group" aria-label={p.name}>
+          <div key={p.id} className="vc-tile" role="group" aria-label={p.name || 'Usuario'}>
             <div className="vc-card">
               {p.id === user?.id ? (
                 // local participant: show local video if cameraOn
                 cameraOn ? (
                   <video ref={localVideoRef} className="vc-local-video" muted playsInline />
                 ) : (
-                  <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('').toUpperCase()}</div>
+                  <div className="vc-avatar">{(p.name || 'Tú').split(' ').map(n => n[0]).join('').toUpperCase()}</div>
                 )
               ) : (
                 // Invitados: mostrar iniciales (preparado para video futuro)
-                <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('').toUpperCase()}</div>
+                <div className="vc-avatar">{(p.name || 'Usuario').split(' ').map(n => n[0]).join('').toUpperCase()}</div>
               )}
             </div>
-            <div className="vc-name">{p.name}</div>
+            <div className="vc-name">{p.name || 'Usuario'}</div>
           </div>
         ))}
       </section>
