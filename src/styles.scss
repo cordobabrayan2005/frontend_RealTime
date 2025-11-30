@@ -323,29 +323,6 @@ select:-webkit-autofill {
 	text-decoration: underline;
 }
 
-/* Center the help links under the auth card so they match the provided mockup */
-.login-links {
-	text-align: center;
-	margin-top: 2rem;
-}
-
-.login-links p {
-	margin: 0.35rem 0;
-}
-
-.login-links .forgot-link,
-.login-links .signup-link {
-	display: inline-block;
-	color: $primary;
-	font-weight: 600;
-	text-decoration: none;
-}
-
-.login-links .forgot-link:hover,
-.login-links .signup-link:hover {
-	text-decoration: underline;
-}
-
 /* Unified status messages on auth pages */
 .login-message {
 	margin-top: 12px;
@@ -550,7 +527,7 @@ select:-webkit-autofill {
 .lead { color: rgba(11,27,43,0.9); margin-bottom: 18px; }
 .section-sub { color: $primary; margin-top: 18px; margin-bottom: 8px; }
 .features-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-top: 12px; }
-.feature-card { background: #ffffff; border: 1px solid rgba(29,78,216,0.06); padding: 14px; border-radius: 10px; min-height: 100px; box-shadow: 0 6px 16px rgba(16,24,40,0.03); }
+.feature-card { background: #ffffff; border: 1px solid rgba(29,78,216,0.06); padding: 14px; border-radius: 10px; min-height: 100px; box-shadow: 0 6px 16px rgba(16,24,0.03); }
 .feature-icon { font-size: 28px; margin-bottom: 8px; }
 .version-row { display:flex; gap: 18px; margin-top: 22px; flex-wrap:wrap; justify-content: center; align-items: flex-start; }
 .version-box, .dev-box { background: #f7fbff; border-radius: 10px; padding: 16px; flex: 0 0 360px; max-width: 360px; border: 1px solid rgba(29,78,216,0.06); text-align: center; }
@@ -584,7 +561,7 @@ select:-webkit-autofill {
 	.vc-grid { gap: 22px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 }
 @media (max-width: $bp-xs) {
-	.vc-grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+	.vc-grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); } /* Ajustado para mejor ajuste en móvil */
 }
 .vc-grid.single { display:flex; justify-content:center; align-items:center; }
 .vc-grid.single .vc-card { width: 520px; height: 360px; border-radius: 28px; max-width: $narrow-max; }
@@ -636,7 +613,23 @@ select:-webkit-autofill {
 
 @media (max-width: $bp-xs) {
 	.vc-control { width:50px; height:50px; font-size:20px; }
+	.videocall-page { padding: 20px 16px 80px; } /* Reducido padding para mejor espacio en móvil */
 }
+
+/* Modal de código */
+.vc-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1500; }
+.vc-modal-content { background: #fff; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%; }
+.vc-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.vc-modal-close { background: transparent; border: none; font-size: 20px; cursor: pointer; }
+.vc-modal-body { text-align: center; }
+.vc-code-display { display: flex; gap: 8px; margin-top: 12px; }
+.vc-code-display input { flex: 1; padding: 8px; border: 1px solid #e6e7ea; border-radius: 4px; }
+.vc-code-display button { padding: 8px 12px; background: $primary; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+
+/* Mensaje de fin de reunión */
+.vc-ended-message { text-align: center; padding: 50px; color: #fff; }
+.vc-ended-message h2 { margin-bottom: 16px; }
+.vc-ended-message p { font-size: 1.1rem; }
 
 /* Chat panel styles */
 .vc-chat-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1450; }
@@ -668,53 +661,51 @@ select:-webkit-autofill {
 
 	 UNUSED END */
 
-	/* Profile modal/card styles */
-	.profile-page { background: #f7f8fb; min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 2.25rem; }
-	.profile-card.modal-like { background: #ffffff; border-radius: 20px; padding: 1.25rem; width: min(920px, 94vw); box-shadow: 0 12px 30px rgba(16,24,40,0.06); position: relative; }
-	.profile-close { position: absolute; right: 18px; top: 14px; background: transparent; border: none; font-size: 26px; cursor: pointer; }
-	.profile-inner { display: flex; gap: 18px; align-items: stretch; }
-	.profile-left { background: #e6e9ec; padding: 18px; border-radius: 12px; width: 360px; }
-	.profile-left h2 { margin: 0 0 8px; color: #111827; }
-	.profile-field { margin: 10px 0; }
-	.field-label { font-weight: 700; color: #111827; font-size: 0.86rem; }
-	/* Unificar tamaño visual entre inputs y valores de solo lectura */
-	.field-value { margin-top: 6px; color: #111827; opacity: 0.9; font-size: 0.95rem; }
-	.profile-field .field-input,
-	.profile-field .field-value {
-		width: 100%;
-		box-sizing: border-box;
-		background: $input-bg;
-		border: 1px solid $input-border;
-		border-radius: 8px;
-		min-height: 48px;
-		padding: 12px 14px;
-		display: flex;
-		align-items: center; /* centra verticalmente texto de solo lectura */
-	}
+/* Profile modal/card styles */
+.profile-page { background: #f7f8fb; min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 2.25rem; }
+.profile-card.modal-like { background: #ffffff; border-radius: 20px; padding: 1.25rem; width: min(920px, 94vw); box-shadow: 0 12px 30px rgba(16,24,40,0.06); position: relative; }
+.profile-close { position: absolute; right: 18px; top: 14px; background: transparent; border: none; font-size: 26px; cursor: pointer; }
+.profile-inner { display: flex; gap: 18px; align-items: stretch; }
+.profile-left { background: #e6e9ec; padding: 18px; border-radius: 12px; width: 360px; }
+.profile-left h2 { margin: 0 0 8px; color: #111827; }
+.profile-field { margin: 10px 0; }
+.field-label { font-weight: 700; color: #111827; font-size: 0.86rem; }
+.field-value { margin-top: 6px; color: #111827; opacity: 0.9; font-size: 0.95rem; }
+.profile-field .field-input,
+.profile-field .field-value {
+	width: 100%;
+	box-sizing: border-box;
+	background: $input-bg;
+	border: 1px solid $input-border;
+	border-radius: 8px;
+	min-height: 48px;
+	padding: 12px 14px;
+	display: flex;
+	align-items: center;
+}
 
-	/* Asegurar que los inputs hereden tipografía y altura coherente */
-	.profile-field .field-input {
-		font-size: 0.97rem;
-		line-height: 1.2;
-		color: $label-color;
-		background: $input-bg;
-	}
-	.profile-divider { width: 1px; background: rgba(16,24,40,0.06); margin: 6px 0; }
-	.profile-right { flex: 1 1 auto; display:flex; align-items:center; justify-content:center; padding: 12px 8px; }
-	.actions-card { width: 100%; max-width: 340px; }
-	.save-btn { display:inline-flex; align-items:center; justify-content:center; gap: 8px; padding: 12px 18px; border-radius: 999px; background: linear-gradient(180deg, $primary 0%, #1557c6 100%); color: #fff; font-weight: 700; border: none; cursor: pointer; font-size: 0.98rem; }
-	.actions-list { margin-top: 22px; display:flex; flex-direction:column; gap: 12px; }
-	.action-item { display:flex; align-items:center; gap: 10px; background: transparent; border: none; text-align:left; cursor: pointer; color: #111827; padding: 6px 0; font-weight: 600; }
-	.action-item.logout { color: #c81010; }
-	.action-icon { width: 28px; display:inline-flex; justify-content:center; }
-	.profile-message { margin-top: 12px; color: $primary; font-weight: 600; }
+.profile-field .field-input {
+	font-size: 0.97rem;
+	line-height: 1.2;
+	color: $label-color;
+	background: $input-bg;
+}
+.profile-divider { width: 1px; background: rgba(16,24,40,0.06); margin: 6px 0; }
+.profile-right { flex: 1 1 auto; display:flex; align-items:center; justify-content:center; padding: 12px 8px; }
+.actions-card { width: 100%; max-width: 340px; }
+.save-btn { display:inline-flex; align-items:center; justify-content:center; gap: 8px; padding: 12px 18px; border-radius: 999px; background: linear-gradient(180deg, $primary 0%, #1557c6 100%); color: #fff; font-weight: 700; border: none; cursor: pointer; font-size: 0.98rem; }
+.actions-list { margin-top: 22px; display:flex; flex-direction:column; gap: 12px; }
+.action-item { display:flex; align-items:center; gap: 10px; background: transparent; border: none; text-align:left; cursor: pointer; color: #111827; padding: 6px 0; font-weight: 600; }
+.action-item.logout { color: #c81010; }
+.action-icon { width: 28px; display:inline-flex; justify-content:center; }
+.profile-message { margin-top: 12px; color: $primary; font-weight: 600; }
 
-	@media (max-width: 880px) {
-		.profile-inner { flex-direction: column; }
-		.profile-left { width: 100%; }
-		.profile-divider { display: none; }
-		.profile-right { padding-top: 8px; }
-	}
+@media (max-width: 880px) {
+	.profile-inner { flex-direction: column; }
+	.profile-left { width: 100%; }
+	.profile-divider { display: none; }
+	.profile-right { padding-top: 8px; }
+}
 
 @media (max-width: $bp-sm) {
 	.profile-page { padding: 1.5rem 1rem; }
@@ -733,8 +724,6 @@ select:-webkit-autofill {
 	background: #ffffff;
 	border-radius: 46px;
 	padding: 34px 36px 30px;
-	/* Keep white card width related to inner gray panel (720px) */
-	/* 720px panel + ~80px side breathing space = ~880px card */
 	width: min(580px, 94vw);
 	margin: 0 auto;
 	box-shadow: 0 12px 30px rgba(16,24,40,0.06);
@@ -935,4 +924,3 @@ select:-webkit-autofill {
 @media (min-width: 1280px) {
 	.sidebar { position: fixed; }
 }
-
