@@ -15,7 +15,8 @@ export default function VideoCall() {
   const { token, user } = useAuthStore();  // Obtener token y usuario (asumiendo user.name y user.id)
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isCreator, setIsCreator] = useState(false);  // Si el usuario es el creador
-  const [showCode, setShowCode] = useState(false);  // Para mostrar/ocultar el código
+  const [showCode, setShowCode] = useState(false);  // Para mostrar/ocultar el modal de código
+  const [meetingEnded, setMeetingEnded] = useState(false);  // Si la reunión terminó
 
   // Start with a single participant (the current user). More participants can be simulated.
   /**
@@ -72,6 +73,13 @@ export default function VideoCall() {
       setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
     });
 
+    // Escuchar terminación de reunión
+    newSocket.on('meeting-ended', (message: string) => {
+      setMeetingEnded(true);
+      alert(message);
+      setTimeout(() => navigate('/realtime'), 3000);  // Redirigir en 3 segundos
+    });
+
     // Manejar errores
     newSocket.on('error', (msg: string) => {
       alert(`Error: ${msg}`);
@@ -103,7 +111,7 @@ export default function VideoCall() {
   }
 
   /**
-   * Toggle the code display visibility.
+   * Toggle the code modal visibility.
    * @returns {void}
    */
   function toggleCode() {
@@ -135,7 +143,7 @@ export default function VideoCall() {
   function sendMessage(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const text = chatInput.trim();
-    if (!text || !socket) return;
+    if (!text || !socket || meetingEnded) return;
     const authorName = user?.name || 'Tú';  // Usar nombre real
     socket.emit('send-message', { meetingId, message: text, author: authorName });
     setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);  // Mostrar 'Tú' para el sender
@@ -245,7 +253,7 @@ export default function VideoCall() {
 
   /**
    * Hang up the call: clears participants and chat, then navigates back to the realtime landing.
-   * If the user is the creator, ends the meeting in the database.
+   * If the user is the creator, ends the meeting in the database and notifies others.
    * @returns {void}
    */
   async function hangup() {
@@ -256,6 +264,8 @@ export default function VideoCall() {
           method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}` },
         });
+        // Notificar a todos via Socket.IO
+        socket?.emit('end-meeting', meetingId);
         console.log('Reunión finalizada por el creador');
       } catch (error) {
         console.error('Error finalizando reunión:', error);
@@ -266,6 +276,17 @@ export default function VideoCall() {
     setShowChat(false);
     // navigate back to realtime landing
     navigate('/realtime');
+  }
+
+  if (meetingEnded) {
+    return (
+      <main className="videocall-page" role="main" aria-label="Videollamada">
+        <div className="vc-ended-message">
+          <h2>La reunión ha terminado</h2>
+          <p>Serás redirigido en unos segundos...</p>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -332,25 +353,24 @@ export default function VideoCall() {
         <button className="vc-control vc-control-hangup" title="Colgar" onClick={hangup}>📞</button>
       </div>
 
-      {/* Code panel (slides from right) */}
+      {/* Code modal (centered) */}
       {showCode && (
-        <div className="vc-code-overlay" onClick={() => setShowCode(false)} />
-      )}
-
-      <aside className={`vc-code-panel ${showCode ? 'open' : ''}`} aria-hidden={!showCode} role="dialog" aria-label="Código de reunión">
-        <header className="vc-code-header">
-          <strong>Código de reunión</strong>
-          <button className="vc-code-close" onClick={() => setShowCode(false)} aria-label="Cerrar código">×</button>
-        </header>
-
-        <div className="vc-code-content">
-          <p>Comparte este código para que otros se unan:</p>
-          <div className="vc-code-display">
-            <input type="text" value={meetingId || ''} readOnly />
-            <button onClick={copyCode}>Copiar</button>
+        <div className="vc-modal-overlay" onClick={() => setShowCode(false)}>
+          <div className="vc-modal-content" onClick={(e) => e.stopPropagation()}>
+            <header className="vc-modal-header">
+              <strong>Código de reunión</strong>
+              <button className="vc-modal-close" onClick={() => setShowCode(false)} aria-label="Cerrar">×</button>
+            </header>
+            <div className="vc-modal-body">
+              <p>Comparte este código para que otros se unan:</p>
+              <div className="vc-code-display">
+                <input type="text" value={meetingId || ''} readOnly />
+                <button onClick={copyCode}>Copiar</button>
+              </div>
+            </div>
           </div>
         </div>
-      </aside>
+      )}
 
       {/* Chat panel (slides from right) */}
       {showChat && (
