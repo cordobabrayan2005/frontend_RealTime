@@ -717,6 +717,27 @@ select:-webkit-autofill {
   .vc-chat-panel { width: 100%; }
 }
 
+@media (max-width: $bp-sm) {
+	.vc-chat-overlay { background: rgba(0,0,0,0.6); }
+	.vc-chat-panel {
+		left: 0;
+		right: 0;
+		top: auto;
+		bottom: 0;
+		height: 72vh;
+		max-width: 100%;
+		border-top-left-radius: 18px;
+		border-top-right-radius: 18px;
+		box-shadow: 0 -16px 40px rgba(2,6,23,0.35);
+		transform: translateY(110%);
+		transition: transform .24s ease;
+	}
+	.vc-chat-panel.open { transform: translateY(0); }
+	.vc-chat-header { padding: 16px 18px; }
+	.vc-chat-messages { padding: 14px; }
+	.vc-chat-input { padding: 14px; }
+}
+
 /* Preserve screen-reader-only utility */
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 
