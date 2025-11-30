@@ -15,21 +15,15 @@ export default function VideoCall() {
   const { token, user } = useAuthStore();  // Obtener token y usuario (asumiendo user.name y user.id)
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isCreator, setIsCreator] = useState(false);  // Si el usuario es el creador
-  const [showCode, setShowCode] = useState(false);  // Para mostrar/ocultar el modal de código
-  const [meetingEnded, setMeetingEnded] = useState(false);  // Si la reunión terminó
+  const [showCode, setShowCode] = useState(false);  // Para mostrar/ocultar el código
 
   // Start with a single participant (the current user). More participants can be simulated.
   /**
-   * Participants list. Each participant has an { id: string, name: string } shape.
+   * Participants list. Each participant has an { id: number, name: string } shape.
    * Starts with a single local participant.
-   * @type {[{id:string,name:string}[], Function]}
+   * @type {[{id:number,name:string}[], Function]}
    */
-  const [participants, setParticipants] = useState(() => {
-    if (user) {
-      return [{ id: user.id, name: user.name || 'Tú' }];
-    }
-    return [];
-  });
+  const [participants, setParticipants] = useState(() => [ { id: 1, name: user?.name || 'Tú' } ]);
 
   /** Whether the local camera is enabled. */
   const [cameraOn, setCameraOn] = useState(false);
@@ -78,27 +72,6 @@ export default function VideoCall() {
       setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
     });
 
-    // Escuchar terminación de reunión
-    newSocket.on('meeting-ended', (message: string) => {
-      setMeetingEnded(true);
-      alert(message);
-      setTimeout(() => navigate('/realtime'), 3000);  // Redirigir en 3 segundos
-    });
-
-    // NUEVO: Escuchar nuevos participantes (invitados)
-    newSocket.on('new-participant', (data: { id: string; name: string }) => {
-      setParticipants((prev) => {
-        // Evitar duplicados
-        if (prev.some(p => p.id === data.id)) return prev;
-        return [...prev, { id: data.id, name: data.name }];
-      });
-    });
-
-    // NUEVO: Escuchar desconexión de participantes
-    newSocket.on('participant-left', (id: string) => {
-      setParticipants((prev) => prev.filter(p => p.id !== id));
-    });
-
     // Manejar errores
     newSocket.on('error', (msg: string) => {
       alert(`Error: ${msg}`);
@@ -116,8 +89,8 @@ export default function VideoCall() {
   function addParticipant() {
     setParticipants((prev) => {
       if (prev.length >= 10) return prev; // limit for layout (ajustado a 10)
-      const nextId = `sim-${Date.now()}`;  // ID único para simulación
-      return [...prev, { id: nextId, name: `Usuario ${prev.length}` }];
+      const nextId = prev.length + 1;
+      return [...prev, { id: nextId, name: `Usuario ${nextId}` }];
     });
   }
 
@@ -130,7 +103,7 @@ export default function VideoCall() {
   }
 
   /**
-   * Toggle the code modal visibility.
+   * Toggle the code display visibility.
    * @returns {void}
    */
   function toggleCode() {
@@ -162,7 +135,7 @@ export default function VideoCall() {
   function sendMessage(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const text = chatInput.trim();
-    if (!text || !socket || meetingEnded) return;
+    if (!text || !socket) return;
     const authorName = user?.name || 'Tú';  // Usar nombre real
     socket.emit('send-message', { meetingId, message: text, author: authorName });
     setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);  // Mostrar 'Tú' para el sender
@@ -197,7 +170,7 @@ export default function VideoCall() {
         // If nothing is desired, ensure we release any existing stream
         if (!desiredVideo && !desiredAudio) {
           if (current) {
-            current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
+            current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
             mediaStreamRef.current = null;
             if (localVideoRef.current) localVideoRef.current.srcObject = null;
           }
@@ -232,7 +205,7 @@ export default function VideoCall() {
 
         // Stop old tracks
         try {
-          current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
+          current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
         } catch (e) { /* ignore */ }
 
         mediaStreamRef.current = newStream;
@@ -272,7 +245,7 @@ export default function VideoCall() {
 
   /**
    * Hang up the call: clears participants and chat, then navigates back to the realtime landing.
-   * If the user is the creator, ends the meeting in the database and notifies others.
+   * If the user is the creator, ends the meeting in the database.
    * @returns {void}
    */
   async function hangup() {
@@ -283,8 +256,6 @@ export default function VideoCall() {
           method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        // Notificar a todos via Socket.IO
-        socket?.emit('end-meeting', meetingId);
         console.log('Reunión finalizada por el creador');
       } catch (error) {
         console.error('Error finalizando reunión:', error);
@@ -297,17 +268,6 @@ export default function VideoCall() {
     navigate('/realtime');
   }
 
-  if (meetingEnded) {
-    return (
-      <main className="videocall-page" role="main" aria-label="Videollamada">
-        <div className="vc-ended-message">
-          <h2>La reunión ha terminado</h2>
-          <p>Serás redirigido en unos segundos...</p>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">
       <div className="vc-top-left-back" onClick={() => window.history.back()} aria-hidden>
@@ -316,21 +276,20 @@ export default function VideoCall() {
 
       <section className={`vc-grid ${participants.length === 1 ? 'single' : ''}`} aria-live="polite">
         {participants.map((p) => (
-          <div key={p.id} className="vc-tile" role="group" aria-label={p.name || 'Usuario'}>
+          <div key={p.id} className="vc-tile" role="group" aria-label={p.name}>
             <div className="vc-card">
-              {p.id === user?.id ? (
+              {p.id === 1 ? (
                 // local participant: show local video if cameraOn
                 cameraOn ? (
                   <video ref={localVideoRef} className="vc-local-video" muted playsInline />
                 ) : (
-                  <div className="vc-avatar">{(p.name || 'Tú').split(' ').map(n => n[0]).join('').toUpperCase()}</div>
+                  <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('')}</div>
                 )
               ) : (
-                // Invitados: mostrar iniciales (preparado para video futuro)
-                <div className="vc-avatar">{(p.name || 'Usuario').split(' ').map(n => n[0]).join('').toUpperCase()}</div>
+                <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('')}</div>
               )}
             </div>
-            <div className="vc-name">{p.name || 'Usuario'}</div>
+            <div className="vc-name">{p.name}</div>
           </div>
         ))}
       </section>
@@ -373,24 +332,25 @@ export default function VideoCall() {
         <button className="vc-control vc-control-hangup" title="Colgar" onClick={hangup}>📞</button>
       </div>
 
-      {/* Code modal (centered) */}
+      {/* Code panel (slides from right) */}
       {showCode && (
-        <div className="vc-modal-overlay" onClick={() => setShowCode(false)}>
-          <div className="vc-modal-content" onClick={(e) => e.stopPropagation()}>
-            <header className="vc-modal-header">
-              <strong>Código de reunión</strong>
-              <button className="vc-modal-close" onClick={() => setShowCode(false)} aria-label="Cerrar">×</button>
-            </header>
-            <div className="vc-modal-body">
-              <p>Comparte este código para que otros se unan:</p>
-              <div className="vc-code-display">
-                <input type="text" value={meetingId || ''} readOnly />
-                <button onClick={copyCode}>Copiar</button>
-              </div>
-            </div>
+        <div className="vc-code-overlay" onClick={() => setShowCode(false)} />
+      )}
+
+      <aside className={`vc-code-panel ${showCode ? 'open' : ''}`} aria-hidden={!showCode} role="dialog" aria-label="Código de reunión">
+        <header className="vc-code-header">
+          <strong>Código de reunión</strong>
+          <button className="vc-code-close" onClick={() => setShowCode(false)} aria-label="Cerrar código">×</button>
+        </header>
+
+        <div className="vc-code-content">
+          <p>Comparte este código para que otros se unan:</p>
+          <div className="vc-code-display">
+            <input type="text" value={meetingId || ''} readOnly />
+            <button onClick={copyCode}>Copiar</button>
           </div>
         </div>
-      )}
+      </aside>
 
       {/* Chat panel (slides from right) */}
       {showChat && (
