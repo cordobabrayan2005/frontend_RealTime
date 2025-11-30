@@ -15,6 +15,12 @@ $bp-2xl: 1280px;
 
 @use "sass:color";
 
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
 /* App layout styles */
 html, body {
 	height: 100%;
@@ -23,6 +29,10 @@ html, body {
 
 #root {
 	height: 100%;
+}
+
+body {
+	overflow-x: hidden;
 }
 
 .app {
@@ -381,6 +391,11 @@ select:-webkit-autofill {
 
 .social-btn:hover { box-shadow: 0 6px 18px rgba(16,24,40,0.08); }
 
+@media (max-width: $bp-sm) {
+	.social-row { width: 100%; flex-direction: column; align-items: stretch; }
+	.social-btn { width: 100%; justify-content: center; }
+}
+
 /* Small helpers for spacing on forms like signup */
 .form-row { display:flex; gap:0.75rem; }
 .form-col { flex:1; }
@@ -397,11 +412,32 @@ select:-webkit-autofill {
 	box-sizing: border-box;
 }
 
+.logo-box {
+	background: #ffffff;
+	padding: 2.25rem;
+	border-radius: 8px;
+	box-shadow: 0 6px 20px rgba(16,24,40,0.04);
+	margin-bottom: 24px;
+	width: 100%;
+	max-width: 340px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
 @media (max-width: $bp-lg) {
 	.realtime-container { padding: 2.25rem 16px; }
 }
 @media (max-width: $bp-sm) {
 	.realtime-container { padding: 1.75rem 12px; }
+}
+
+@media (max-width: $bp-md) {
+	.realtime-container .realtime-card { padding: 1.9rem 1.6rem; }
+}
+@media (max-width: $bp-sm) {
+	.logo-box { padding: 1.5rem 1.1rem; max-width: 280px; margin-bottom: 20px; }
+	.realtime-container .realtime-card { padding: 1.5rem 1.15rem; }
 }
 
 /* card within realtime landing - keep content narrower and centered */
@@ -496,6 +532,14 @@ select:-webkit-autofill {
 /* Input row for entering meeting code */
 .rt-code-row { display:flex; gap:0.5rem; align-items:center; justify-content: center; }
 .rt-code-input { padding: 0.6rem 0.9rem; border-radius: 8px; border: 1px solid $input-border; background: $input-bg; color: $label-color; min-width: 220px; }
+
+@media (max-width: $bp-sm) {
+	.realtime-actions { flex-direction: column; gap: 0.85rem; align-items: stretch; width: 100%; }
+	.realtime-actions .btn { width: 100%; min-width: 0; }
+	.rt-code-row { flex-direction: column; width: 100%; align-items: stretch; gap: 0.75rem; }
+	.rt-code-row .btn { width: 100%; }
+	.rt-code-input { width: 100%; min-width: 0; }
+}
 
 /* Hamburger button (top-left) */
 .hamburger {

@@ -135,7 +135,7 @@ export default function RealTime() {
             {flash.text}
           </p>
         )}
-        <div className="logo-box" style={{ background: '#fff', padding: '2.25rem', borderRadius: 8, boxShadow: '0 6px 20px rgba(16,24,40,0.04)', marginBottom: 24 }}>
+        <div className="logo-box">
           <img src="/RealTime.png" alt="RealTime" className="logo-image large" />
         </div>
 
