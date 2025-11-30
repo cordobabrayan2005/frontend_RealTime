@@ -24,7 +24,7 @@ export default function VideoCall() {
    * Starts with a single local participant.
    * @type {[{id:number,name:string}[], Function]}
    */
-  const [participants, setParticipants] = useState(() => [ { id: 1, name: user?.name || 'Tú' } ]);
+  const [participants, setParticipants] = useState(() => [ { id: user?.id || 'local', name: 'Tú', isLocal: true } ]); // Usuario local siempre presente
 
   /** Whether the local camera is enabled. */
   const [cameraOn, setCameraOn] = useState(false);
@@ -46,7 +46,7 @@ export default function VideoCall() {
 
   // Conectar a Socket.IO y obtener reunión al montar
   useEffect(() => {
-    if (!meetingId || !token) return;
+    if (!meetingId || !token || !user) return;
     const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
     const newSocket = io(chatBackendUrl, {
       auth: { token },  // Enviar token para autenticación
@@ -59,14 +59,14 @@ export default function VideoCall() {
     })
       .then(res => res.json())
       .then(data => {
-        if (data.meeting && data.meeting.creatorId === user?.id) {
+        if (data.meeting && data.meeting.creatorId === user.id) {
           setIsCreator(true);
         }
       })
       .catch(err => console.error('Error obteniendo reunión:', err));
 
-    // Unirse a la reunión
-    newSocket.emit('join-meeting', meetingId);
+    // Unirse a la reunión con userId y name
+    newSocket.emit('join-meeting', { meetingId, userId: user.id, name: user.name });
 
     // Escuchar mensajes
     newSocket.on('receive-message', (data: { author: string; text: string; timestamp: string }) => {
@@ -80,6 +80,20 @@ export default function VideoCall() {
       setTimeout(() => navigate('/realtime'), 3000);  // Redirigir en 3 segundos
     });
 
+    // NUEVO: Escuchar cuando un usuario se une
+    newSocket.on('user-joined', (data: { userId: string; name: string }) => {
+      setParticipants((prev) => {
+        // Evitar duplicados y límite de 10
+        if (prev.some(p => p.id === data.userId) || prev.length >= 10) return prev;
+        return [...prev, { id: data.userId, name: data.name, isLocal: false }];
+      });
+    });
+
+    // NUEVO: Escuchar cuando un usuario sale
+    newSocket.on('user-left', (data: { userId: string }) => {
+      setParticipants((prev) => prev.filter(p => p.id !== data.userId));
+    });
+
     // Manejar errores
     newSocket.on('error', (msg: string) => {
       alert(`Error: ${msg}`);
@@ -90,17 +104,6 @@ export default function VideoCall() {
     };
   }, [meetingId, token, user?.id]);
 
-  /**
-   * Adds a simulated participant to the call, up to a maximum number for layout purposes.
-   * @returns {void}
-   */
-  function addParticipant() {
-    setParticipants((prev) => {
-      if (prev.length >= 10) return prev; // limit for layout (ajustado a 10)
-      const nextId = prev.length + 1;
-      return [...prev, { id: nextId, name: `Usuario ${nextId}` }];
-    });
-  }
 
   /**
    * Toggle the chat panel visibility.
@@ -299,14 +302,15 @@ export default function VideoCall() {
         {participants.map((p) => (
           <div key={p.id} className="vc-tile" role="group" aria-label={p.name}>
             <div className="vc-card">
-              {p.id === 1 ? (
-                // local participant: show local video if cameraOn
+              {p.isLocal ? (
+                // Local participant: show local video if cameraOn
                 cameraOn ? (
                   <video ref={localVideoRef} className="vc-local-video" muted playsInline />
                 ) : (
                   <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('')}</div>
                 )
               ) : (
+                // Remote participants: always show avatar (no video for now)
                 <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('')}</div>
               )}
             </div>
@@ -349,7 +353,7 @@ export default function VideoCall() {
         >
           🔗
         </button>
-        <button className="vc-control vc-control-add" title="Agregar participante" onClick={addParticipant}>＋</button>
+        {/* REMOVIDO: Botón de agregar participante */}
         <button className="vc-control vc-control-hangup" title="Colgar" onClick={hangup}>📞</button>
       </div>
 

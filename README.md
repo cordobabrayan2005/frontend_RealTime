@@ -1,4 +1,4 @@
-﻿#  RealTime Frontend (estado actual)
+﻿#  RealTime Frontend
 
 **Desarrollado por:** REALTIME
 
