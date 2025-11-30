@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import io, { Socket } from 'socket.io-client';
+import { useAuthStore } from '../stores/authStore';  // Corregido: ../stores/authStore
 
 /**
  * VideoCall React component.
@@ -8,8 +10,12 @@ import { useNavigate } from 'react-router-dom';
  * @returns {JSX.Element} The video call page element.
  */
 export default function VideoCall() {
-    // Start with a single participant (the current user). More participants can be simulated.
+  const location = useLocation();
+  const meetingId = (location.state as any)?.meetingId;  // ID de reunión desde RealTime
+  const { token } = useAuthStore();  // Obtener token JWT
+  const [socket, setSocket] = useState<Socket | null>(null);
 
+  // Start with a single participant (the current user). More participants can be simulated.
   /**
    * Participants list. Each participant has an { id: number, name: string } shape.
    * Starts with a single local participant.
@@ -34,6 +40,33 @@ export default function VideoCall() {
    * Initialized with a system welcome message.
    */
   const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
+
+  // Conectar a Socket.IO al montar
+  useEffect(() => {
+    if (!meetingId || !token) return;
+    const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
+    const newSocket = io(chatBackendUrl, {
+      auth: { token },  // Enviar token para autenticación
+    });
+    setSocket(newSocket);
+
+    // Unirse a la reunión
+    newSocket.emit('join-meeting', meetingId);
+
+    // Escuchar mensajes
+    newSocket.on('receive-message', (data: { author: string; text: string; timestamp: string }) => {
+      setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
+    });
+
+    // Manejar errores
+    newSocket.on('error', (msg: string) => {
+      alert(`Error: ${msg}`);
+    });
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [meetingId, token]);
 
   /**
    * Adds a simulated participant to the call, up to a maximum number for layout purposes.
@@ -65,7 +98,8 @@ export default function VideoCall() {
   function sendMessage(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const text = chatInput.trim();
-    if (!text) return;
+    if (!text || !socket) return;
+    socket.emit('send-message', { meetingId, message: text, author: 'Tú' });
     setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);
     setChatInput('');
   }
@@ -167,8 +201,9 @@ export default function VideoCall() {
       const s = mediaStreamRef.current;
       if (s) s.getTracks().forEach(t => t.stop());
       mediaStreamRef.current = null;
+      if (socket) socket.disconnect();
     };
-  }, []);
+  }, [socket]);
 
   /**
    * Hang up the call: clears participants and chat, then navigates back to the realtime landing.

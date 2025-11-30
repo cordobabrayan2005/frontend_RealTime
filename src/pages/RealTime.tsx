@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuthStore } from '../stores/authStore';  // Corregido: ../stores/authStore
+import { api } from "../services/api";  // Corregido: ../services/api
 
 /**
  * RealTime page component.
@@ -21,6 +23,7 @@ export default function RealTime() {
   const navigate = useNavigate();
   const location = useLocation();
   const [flash, setFlash] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
+  const { token } = useAuthStore();  // Obtener token JWT
 
   // Read welcome flash message from navigation state (once)
   useEffect(() => {
@@ -42,22 +45,73 @@ export default function RealTime() {
   }
 
   /**
+   * Create a new meeting by calling the chat backend API.
+   *
+   * @returns {Promise<void>}
+   */
+  async function handleCreateMeeting() {
+    if (!token) {
+      alert("Debes iniciar sesión para crear una reunión.");
+      return;
+    }
+    try {
+      const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
+      const response = await fetch(`${chatBackendUrl}/api/meetings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) throw new Error('Error creando reunión');
+      const data = await response.json();
+      const meetingId = data.meeting.id;
+      // Mostrar el código para compartir
+      alert(`Reunión creada. Comparte este código: ${meetingId}`);
+      // Navegar a videocall con el ID de reunión
+      navigate('/videocall', { state: { meetingId } });
+    } catch (error: any) {
+      console.error('Error creando reunión:', error);
+      alert('Error creando reunión. Inténtalo de nuevo.');
+    }
+  }
+
+  /**
    * Attempt to join a meeting using the current roomCode.
    *
-   * Performs basic client-side validation and presents simple UI feedback
-   * (alerts / console) until real join logic is implemented.
+   * Validates the code with the backend and navigates if valid.
    *
-   * @returns {void}
+   * @returns {Promise<void>}
    */
-  function handleJoinWithCode() {
+  async function handleJoinWithCode() {
     if (!roomCode.trim()) {
-      // small UI feedback for empty code
       alert("Por favor ingresa un código de reunión.");
       return;
     }
-    // For now just log — integrate with API/logic later
-    console.log("Intentando unirse con código:", roomCode);
-    alert(`Intentando unirse a la reunión: ${roomCode}`);
+    if (!token) {
+      alert("Debes iniciar sesión para unirte a una reunión.");
+      return;
+    }
+    try {
+      const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
+      const response = await fetch(`${chatBackendUrl}/api/meetings/${roomCode}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) throw new Error('Código de reunión inválido o reunión no encontrada');
+      const data = await response.json();
+      if (data.meeting.status !== 'active') {
+        alert('La reunión ya ha finalizado.');
+        return;
+      }
+      // Navegar a videocall con el ID de reunión
+      navigate('/videocall', { state: { meetingId: roomCode } });
+    } catch (error: any) {
+      console.error('Error uniendo a reunión:', error);
+      alert('Código inválido o error al unirte. Verifica e intenta de nuevo.');
+    }
     // reset
     setRoomCode("");
     setShowCodeInput(false);
@@ -86,7 +140,7 @@ export default function RealTime() {
         </div>
 
         <nav id="rt-actions" className="realtime-actions" aria-label="Acciones de reunión">
-          <button className="btn primary" type="button" onClick={() => navigate('/videocall')}>
+          <button className="btn primary" type="button" onClick={handleCreateMeeting}>
             Crear reunión
           </button>
 
