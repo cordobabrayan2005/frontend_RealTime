@@ -3,14 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import io, { Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';  // Para obtener token y usuario
 
-// Tipo para un participante (extendido para video futuro)
-type Participant = {
-  id: string;  // Cambiado a string para IDs únicos de socket
-  name: string;
-  stream?: MediaStream;  // Para video futuro
-  isLocal?: boolean;  // Si es el usuario local
-};
-
+/**
+ * VideoCall React component.
+ * Manages local media (camera/microphone), a simulated participants list and an in-call chat UI.
+ *
+ * @returns {JSX.Element} The video call page element.
+ */
 export default function VideoCall() {
   const location = useLocation();
   const meetingId = (location.state as any)?.meetingId;  // ID de reunión desde RealTime
@@ -20,14 +18,15 @@ export default function VideoCall() {
   const [showCode, setShowCode] = useState(false);  // Para mostrar/ocultar el modal de código
   const [meetingEnded, setMeetingEnded] = useState(false);  // Si la reunión terminó
 
-  // Estado para participantes (inicia con el usuario local)
-  const [participants, setParticipants] = useState<Participant[]>(() => {
+  // Start with a single participant (the current user). More participants can be simulated.
+  /**
+   * Participants list. Each participant has an { id: string, name: string } shape.
+   * Starts with a single local participant.
+   * @type {[{id:string,name:string}[], Function]}
+   */
+  const [participants, setParticipants] = useState(() => {
     if (user) {
-      return [{
-        id: user.id,
-        name: user.name || 'Tú',
-        isLocal: true,
-      }];
+      return [{ id: user.id, name: user.name || 'Tú' }];
     }
     return [];
   });
@@ -111,6 +110,18 @@ export default function VideoCall() {
   }, [meetingId, token, user?.id]);
 
   /**
+   * Adds a simulated participant to the call, up to a maximum number for layout purposes.
+   * @returns {void}
+   */
+  function addParticipant() {
+    setParticipants((prev) => {
+      if (prev.length >= 10) return prev; // limit for layout (ajustado a 10)
+      const nextId = `sim-${Date.now()}`;  // ID único para simulación
+      return [...prev, { id: nextId, name: `Usuario ${prev.length}` }];
+    });
+  }
+
+  /**
    * Toggle the chat panel visibility.
    * @returns {void}
    */
@@ -154,7 +165,6 @@ export default function VideoCall() {
     if (!text || !socket || meetingEnded) return;
     const authorName = user?.name || 'Tú';  // Usar nombre real
     socket.emit('send-message', { meetingId, message: text, author: authorName });
-    setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);  // Mostrar 'Tú' para el sender
     setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);  // Mostrar 'Tú' para el sender
     setChatInput('');
   }
@@ -202,10 +212,6 @@ export default function VideoCall() {
           if (localVideoRef.current && stream.getVideoTracks().length) {
             try { localVideoRef.current.srcObject = stream; await localVideoRef.current.play(); } catch (e) { /* ignore */ }
           }
-          // NUEVO: Asignar stream al participante local
-          setParticipants((prev) =>
-            prev.map(p => p.isLocal ? { ...p, stream } : p)
-          );
           return;
         }
 
@@ -233,10 +239,6 @@ export default function VideoCall() {
         if (localVideoRef.current) {
           try { localVideoRef.current.srcObject = newStream; if (newStream.getVideoTracks().length) await localVideoRef.current.play(); } catch (e) { /* ignore */ }
         }
-        // NUEVO: Actualizar stream del participante local
-        setParticipants((prev) =>
-          prev.map(p => p.isLocal ? { ...p, stream: newStream } : p)
-        );
       } catch (err: any) {
         console.error('getUserMedia error', err);
         if (err && /NotAllowedError|SecurityError/.test(err.name)) {
@@ -316,18 +318,16 @@ export default function VideoCall() {
         {participants.map((p) => (
           <div key={p.id} className="vc-tile" role="group" aria-label={p.name}>
             <div className="vc-card">
-              {p.stream ? (
-                // NUEVO: Mostrar video si hay stream (local o remoto)
-                <video
-                  ref={p.isLocal ? localVideoRef : undefined}
-                  className="vc-local-video"
-                  autoPlay
-                  muted={p.isLocal}  // Mutear local para evitar eco
-                  playsInline
-                />
+              {p.id === user?.id ? (
+                // local participant: show local video if cameraOn
+                cameraOn ? (
+                  <video ref={localVideoRef} className="vc-local-video" muted playsInline />
+                ) : (
+                  <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('').toUpperCase()}</div>
+                )
               ) : (
-                // Mostrar iniciales
-                <div className="vc-avatar">{p.name.split(' ').map(n => n[0]).join('').toUpperCase()}</div>
+                // Invitados: mostrar iniciales (preparado para video futuro)
+                <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('').toUpperCase()}</div>
               )}
             </div>
             <div className="vc-name">{p.name}</div>
@@ -369,7 +369,7 @@ export default function VideoCall() {
         >
           🔗
         </button>
-        {/* REMOVIDO: Botón de agregar participante manual (ahora automático) */}
+        <button className="vc-control vc-control-add" title="Agregar participante" onClick={addParticipant}>＋</button>
         <button className="vc-control vc-control-hangup" title="Colgar" onClick={hangup}>📞</button>
       </div>
 
