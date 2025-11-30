@@ -24,7 +24,7 @@ export default function VideoCall() {
    * Starts with a single local participant.
    * @type {[{id:number,name:string}[], Function]}
    */
-  const [participants, setParticipants] = useState(() => [ { id: user?.id || 'local', name: 'Tú', isLocal: true } ]); // Usuario local siempre presente
+  const [participants, setParticipants] = useState(() => [{ id: user?.id || 'local', name: 'Tú', isLocal: true }]); // Usuario local siempre presente
 
   /** Whether the local camera is enabled. */
   const [cameraOn, setCameraOn] = useState(false);
@@ -49,7 +49,11 @@ export default function VideoCall() {
     if (!meetingId || !token || !user) return;
     const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
     const newSocket = io(chatBackendUrl, {
-      auth: { token },  // Enviar token para autenticación
+      auth: { token },
+      // Agregar opciones para reconexiones
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
     setSocket(newSocket);
 
@@ -65,23 +69,37 @@ export default function VideoCall() {
       })
       .catch(err => console.error('Error obteniendo reunión:', err));
 
-    // Unirse a la reunión con userId y name
-    newSocket.emit('join-meeting', { meetingId, userId: user.id, name: user.name });
+    // Flag para evitar doble emisión
+    let hasJoined = false;
 
+    // Manejar conexión inicial y reconexiones
+    const handleConnect = () => {
+      console.log('[FRONT] Socket conectado, uniéndose a reunión si no lo ha hecho');
+      if (!hasJoined) {
+        newSocket.emit('join-meeting', { meetingId, userId: user.id, name: user.name });
+        hasJoined = true;  // Marcar como unido para evitar repeticiones
+      }
+    };
+    newSocket.on('connect', handleConnect);
+
+    
     // Escuchar mensajes
     newSocket.on('receive-message', (data: { author: string; text: string; timestamp: string }) => {
+      console.log('[FRONT] Mensaje recibido:', data);
       setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
     });
 
     // Escuchar terminación de reunión
     newSocket.on('meeting-ended', (message: string) => {
+      console.log('[FRONT] Reunión terminada:', message);
       setMeetingEnded(true);
       alert(message);
       setTimeout(() => navigate('/realtime'), 3000);  // Redirigir en 3 segundos
     });
 
-    // NUEVO: Escuchar cuando un usuario se une
+    // Escuchar cuando un usuario se une
     newSocket.on('user-joined', (data: { userId: string; name: string }) => {
+      console.log('[FRONT] Usuario unido:', data);
       setParticipants((prev) => {
         // Evitar duplicados y límite de 10
         if (prev.some(p => p.id === data.userId) || prev.length >= 10) return prev;
@@ -89,17 +107,21 @@ export default function VideoCall() {
       });
     });
 
-    // NUEVO: Escuchar cuando un usuario sale
+    // Escuchar cuando un usuario sale
     newSocket.on('user-left', (data: { userId: string }) => {
+      console.log('[FRONT] Usuario salió:', data);
       setParticipants((prev) => prev.filter(p => p.id !== data.userId));
     });
 
     // Manejar errores
     newSocket.on('error', (msg: string) => {
+      console.error('[FRONT] Error de socket:', msg);
       alert(`Error: ${msg}`);
     });
 
     return () => {
+      console.log('[FRONT] Cleanup: desconectando socket');
+      newSocket.off('connect', handleConnect);
       newSocket.disconnect();
     };
   }, [meetingId, token, user?.id]);
@@ -181,7 +203,7 @@ export default function VideoCall() {
         // If nothing is desired, ensure we release any existing stream
         if (!desiredVideo && !desiredAudio) {
           if (current) {
-            current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+            current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
             mediaStreamRef.current = null;
             if (localVideoRef.current) localVideoRef.current.srcObject = null;
           }
@@ -216,7 +238,7 @@ export default function VideoCall() {
 
         // Stop old tracks
         try {
-          current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+          current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
         } catch (e) { /* ignore */ }
 
         mediaStreamRef.current = newStream;
@@ -307,11 +329,11 @@ export default function VideoCall() {
                 cameraOn ? (
                   <video ref={localVideoRef} className="vc-local-video" muted playsInline />
                 ) : (
-                  <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('')}</div>
+                  <div className="vc-avatar">{p.name.split(' ').map(n => n[0]).join('')}</div>
                 )
               ) : (
                 // Remote participants: always show avatar (no video for now)
-                <div className="vc-avatar">{p.name.split(' ').map(n=>n[0]).join('')}</div>
+                <div className="vc-avatar">{p.name.split(' ').map(n => n[0]).join('')}</div>
               )}
             </div>
             <div className="vc-name">{p.name}</div>
