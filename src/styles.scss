@@ -665,7 +665,7 @@ select:-webkit-autofill {
 }
 .vc-control { width:64px; height:64px; border-radius: 999px; display:inline-flex; align-items:center; justify-content:center; font-size:22px; border:none; cursor:pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
 .vc-control-muted { background: #1f2937; color:#fff; }
-.vc-control-chat { background: rgba(255,255,255,0.06); color:#fff; }
+.vc-control-chat { background: rgba(255,255,255,0.06); color:#fff; position: relative;}
 .vc-control-hangup { background: #c81010; color: #fff; }
 
 /* Active state for camera/mic */
@@ -1011,4 +1011,14 @@ select:-webkit-autofill {
 /* Sidebar responsive: optionally keep it docked on very wide screens */
 @media (min-width: 1280px) {
 	.sidebar { position: fixed; }
+}
+
+/* Notificacion para mensajes*/
+.vc-chat-notification {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  color: rgb(72, 255, 0);
+  font-size: 12px;
+  font-weight: bold;
 }

@@ -38,6 +38,9 @@ export default function VideoCall() {
   /** Current chat input value. */
   const [chatInput, setChatInput] = useState('');
 
+  /** Add status for new message notifications */
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+
   /**
    * Chat messages list. Each message has { id: number, author: string, text: string }.
    * Initialized with a system welcome message.
@@ -87,6 +90,21 @@ export default function VideoCall() {
     newSocket.on('receive-message', (data: { author: string; text: string; timestamp: string }) => {
       console.log('[FRONT] Mensaje recibido:', data);
       setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
+      // Notificar si el chat está cerrado
+      if (!showChat) {
+        setHasNewMessages(true);
+      }
+    });
+
+    // Nuevo: Escuchar lista de participantes al unirse
+    newSocket.on('participants-list', (participantsList: { userId: string; name: string }[]) => {
+      console.log('[FRONT] Lista de participantes recibida:', participantsList);
+      // Actualizar participants con la lista completa, marcando local
+      setParticipants(participantsList.map(p => ({
+        id: p.userId,
+        name: p.userId === user.id ? 'Tú' : p.name,  // 'Tú' para el local
+        isLocal: p.userId === user.id
+      })));
     });
 
     // Escuchar terminación de reunión
@@ -133,6 +151,9 @@ export default function VideoCall() {
    */
   function toggleChat() {
     setShowChat((s) => !s);
+    if (!showChat) {  // Si se abre el chat, quitar notificación
+      setHasNewMessages(false);
+    }
   }
 
   /**
@@ -366,6 +387,7 @@ export default function VideoCall() {
           onClick={toggleChat}
         >
           💬
+          {hasNewMessages && !showChat && <span className="vc-chat-notification">●</span>}  {/* Punto rojo */}
         </button>
         <button
           className={`vc-control vc-control-code ${showCode ? 'active' : ''}`}
