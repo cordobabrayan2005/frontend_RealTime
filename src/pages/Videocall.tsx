@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import io, { Socket } from 'socket.io-client';
-import { useAuthStore } from '../stores/authStore';  // Corregido: ../stores/authStore
+import { useAuthStore } from '../stores/authStore';  // Para obtener token y usuario
 
 /**
  * VideoCall React component.
@@ -12,8 +12,10 @@ import { useAuthStore } from '../stores/authStore';  // Corregido: ../stores/aut
 export default function VideoCall() {
   const location = useLocation();
   const meetingId = (location.state as any)?.meetingId;  // ID de reunión desde RealTime
-  const { token } = useAuthStore();  // Obtener token JWT
+  const { token, user } = useAuthStore();  // Obtener token y usuario (asumiendo user.name y user.id)
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [isCreator, setIsCreator] = useState(false);  // Si el usuario es el creador
+  const [showCode, setShowCode] = useState(false);  // Para mostrar/ocultar el código
 
   // Start with a single participant (the current user). More participants can be simulated.
   /**
@@ -21,7 +23,7 @@ export default function VideoCall() {
    * Starts with a single local participant.
    * @type {[{id:number,name:string}[], Function]}
    */
-  const [participants, setParticipants] = useState(() => [ { id: 1, name: 'Tú' } ]);
+  const [participants, setParticipants] = useState(() => [ { id: 1, name: user?.name || 'Tú' } ]);
 
   /** Whether the local camera is enabled. */
   const [cameraOn, setCameraOn] = useState(false);
@@ -41,7 +43,7 @@ export default function VideoCall() {
    */
   const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
 
-  // Conectar a Socket.IO al montar
+  // Conectar a Socket.IO y obtener reunión al montar
   useEffect(() => {
     if (!meetingId || !token) return;
     const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
@@ -49,6 +51,18 @@ export default function VideoCall() {
       auth: { token },  // Enviar token para autenticación
     });
     setSocket(newSocket);
+
+    // Obtener reunión para verificar si es creador
+    fetch(`${chatBackendUrl}/api/meetings/${meetingId}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.meeting && data.meeting.creatorId === user?.id) {
+          setIsCreator(true);
+        }
+      })
+      .catch(err => console.error('Error obteniendo reunión:', err));
 
     // Unirse a la reunión
     newSocket.emit('join-meeting', meetingId);
@@ -66,7 +80,7 @@ export default function VideoCall() {
     return () => {
       newSocket.disconnect();
     };
-  }, [meetingId, token]);
+  }, [meetingId, token, user?.id]);
 
   /**
    * Adds a simulated participant to the call, up to a maximum number for layout purposes.
@@ -74,9 +88,9 @@ export default function VideoCall() {
    */
   function addParticipant() {
     setParticipants((prev) => {
-      if (prev.length >= 9) return prev; // limit for layout
+      if (prev.length >= 10) return prev; // limit for layout (ajustado a 10)
       const nextId = prev.length + 1;
-      return [...prev, { id: nextId, name: `User ${nextId}` }];
+      return [...prev, { id: nextId, name: `Usuario ${nextId}` }];
     });
   }
 
@@ -86,6 +100,29 @@ export default function VideoCall() {
    */
   function toggleChat() {
     setShowChat((s) => !s);
+  }
+
+  /**
+   * Toggle the code display visibility.
+   * @returns {void}
+   */
+  function toggleCode() {
+    setShowCode((s) => !s);
+  }
+
+  /**
+   * Copy the meeting code to clipboard.
+   * @returns {void}
+   */
+  function copyCode() {
+    if (meetingId) {
+      navigator.clipboard.writeText(meetingId).then(() => {
+        alert('Código copiado al portapapeles');
+      }).catch(err => {
+        console.error('Error copiando código:', err);
+        alert('Error copiando código');
+      });
+    }
   }
 
   /**
@@ -99,8 +136,9 @@ export default function VideoCall() {
     if (e) e.preventDefault();
     const text = chatInput.trim();
     if (!text || !socket) return;
-    socket.emit('send-message', { meetingId, message: text, author: 'Tú' });
-    setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);
+    const authorName = user?.name || 'Tú';  // Usar nombre real
+    socket.emit('send-message', { meetingId, message: text, author: authorName });
+    setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);  // Mostrar 'Tú' para el sender
     setChatInput('');
   }
 
@@ -207,9 +245,22 @@ export default function VideoCall() {
 
   /**
    * Hang up the call: clears participants and chat, then navigates back to the realtime landing.
+   * If the user is the creator, ends the meeting in the database.
    * @returns {void}
    */
-  function hangup() {
+  async function hangup() {
+    if (isCreator && meetingId && token) {
+      try {
+        const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';
+        await fetch(`${chatBackendUrl}/api/meetings/${meetingId}/end`, {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        console.log('Reunión finalizada por el creador');
+      } catch (error) {
+        console.error('Error finalizando reunión:', error);
+      }
+    }
     // reset state if desired
     setParticipants([]);
     setShowChat(false);
@@ -269,9 +320,37 @@ export default function VideoCall() {
         >
           💬
         </button>
+        <button
+          className={`vc-control vc-control-code ${showCode ? 'active' : ''}`}
+          title="Código de reunión"
+          aria-pressed={showCode}
+          onClick={toggleCode}
+        >
+          🔗
+        </button>
         <button className="vc-control vc-control-add" title="Agregar participante" onClick={addParticipant}>＋</button>
         <button className="vc-control vc-control-hangup" title="Colgar" onClick={hangup}>📞</button>
       </div>
+
+      {/* Code panel (slides from right) */}
+      {showCode && (
+        <div className="vc-code-overlay" onClick={() => setShowCode(false)} />
+      )}
+
+      <aside className={`vc-code-panel ${showCode ? 'open' : ''}`} aria-hidden={!showCode} role="dialog" aria-label="Código de reunión">
+        <header className="vc-code-header">
+          <strong>Código de reunión</strong>
+          <button className="vc-code-close" onClick={() => setShowCode(false)} aria-label="Cerrar código">×</button>
+        </header>
+
+        <div className="vc-code-content">
+          <p>Comparte este código para que otros se unan:</p>
+          <div className="vc-code-display">
+            <input type="text" value={meetingId || ''} readOnly />
+            <button onClick={copyCode}>Copiar</button>
+          </div>
+        </div>
+      </aside>
 
       {/* Chat panel (slides from right) */}
       {showChat && (
