@@ -111,13 +111,13 @@ export default function Login({ onAuth }: Props) {
     return () => document.body.classList.remove("login-page");
   }, []);
 
-  // Mostrar mensaje de éxito si venimos de un registro
+  // Display success message if we are coming from a log
   useEffect(() => {
     const state = location.state as any;
     if (state?.flash) {
       setMsg(state.flash.text || "Cuenta creada sin problemas. Inicia sesión para continuar.");
       setMsgType(state.flash.type || "success");
-      // Limpiar el estado de la navegación para evitar re-mostrar al retroceder
+      // Clear the navigation state to prevent it from re-displaying when going back.
       navigate(location.pathname, { replace: true });
     }
   }, [location, navigate]);

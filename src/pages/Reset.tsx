@@ -88,7 +88,7 @@ export default function Reset() {
       return;
     }
     try {
-      await api.reset(token, password);  // Cambiado: quitar confirm
+      await api.reset(token, password);  // Changed: remove confirm
       setMsg("Contraseña actualizada. Redirigiendo al inicio de sesión…");
       setMsgType("success");
       setTimeout(() => navigate("/login"), 1200);

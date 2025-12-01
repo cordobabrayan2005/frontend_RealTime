@@ -66,9 +66,9 @@ export default function RealTime() {
       if (!response.ok) throw new Error('Error creando reunión');
       const data = await response.json();
       const meetingId = data.meeting.id;
-      // Mostrar el código para compartir
+      // Show the sharing code
       alert(`Reunión creada. Comparte este código: ${meetingId}`);
-      // Navegar a videocall con el ID de reunión
+      // Navigate to video call using the meeting ID
       navigate('/videocall', { state: { meetingId } });
     } catch (error: any) {
       console.error('Error creando reunión:', error);
@@ -106,7 +106,7 @@ export default function RealTime() {
         alert('La reunión ya ha finalizado.');
         return;
       }
-      // Navegar a videocall con el ID de reunión
+      // Navigate to video call using the meeting ID
       navigate('/videocall', { state: { meetingId: roomCode } });
     } catch (error: any) {
       console.error('Error uniendo a reunión:', error);

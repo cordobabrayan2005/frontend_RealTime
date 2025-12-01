@@ -106,7 +106,7 @@ export default function Signup() {
       await api.signup(formData);
       setMsg("Cuenta creada sin problemas. Inicia sesión para continuar.");
       setMsgType("success");
-      // Enviar mensaje flash al Login y redirigir
+      // Send a flash message to the login and redirect
       navigate("/login", {
         state: {
           flash: {

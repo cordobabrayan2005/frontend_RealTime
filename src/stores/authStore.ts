@@ -48,7 +48,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   socialLogin: (provider: 'google' | 'github') => Promise<void>;
   logout: () => void;
-  checkAuth: () => void;  // Verifica token al cargar app
+  checkAuth: () => void;  // Verify token when loading app
 }
 
 /**
@@ -64,7 +64,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: localStorage.getItem('token'),
   isLoading: false,
   error: null,
-  isAuthed: !!localStorage.getItem('token'),  // Basado en token
+  isAuthed: !!localStorage.getItem('token'),  // Token-based
 
    /**
    * Logs in a user with email and password.

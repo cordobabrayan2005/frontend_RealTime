@@ -118,7 +118,7 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 export const api = {
-  // IMPORTANTE: Como BASE ya termina en /api, no repetir /api en cada path
+  // IMPORTANT: Since BASE already ends in /api, do not repeat /api in each path
   signup: async (data: AnyObj) => request('/register', { method: 'POST', body: JSON.stringify(data) }),
   login: async (email: string, password: string) => {
     const result = await request('/login', { method: 'POST', body: JSON.stringify({ email, password }) });

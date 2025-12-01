@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import io, { Socket } from 'socket.io-client';
-import { useAuthStore } from '../stores/authStore';  // Para obtener token y usuario
+import { useAuthStore } from '../stores/authStore';  // To obtain token and username
 
 /**
  * VideoCall React component.
@@ -11,12 +11,12 @@ import { useAuthStore } from '../stores/authStore';  // Para obtener token y usu
  */
 export default function VideoCall() {
   const location = useLocation();
-  const meetingId = (location.state as any)?.meetingId;  // ID de reunión desde RealTime
-  const { token, user } = useAuthStore();  // Obtener token y usuario (asumiendo user.name y user.id)
+  const meetingId = (location.state as any)?.meetingId;  // Meeting ID from RealTime
+  const { token, user } = useAuthStore();  // Obtain token and user (assuming user.name and user.id)
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [isCreator, setIsCreator] = useState(false);  // Si el usuario es el creador
-  const [showCode, setShowCode] = useState(false);  // Para mostrar/ocultar el modal de código
-  const [meetingEnded, setMeetingEnded] = useState(false);  // Si la reunión terminó
+  const [isCreator, setIsCreator] = useState(false);  // If the user is the creator
+  const [showCode, setShowCode] = useState(false);  // To show/hide the code modal
+  const [meetingEnded, setMeetingEnded] = useState(false);  // If the meeting ended
 
   // Start with a single participant (the current user). More participants can be simulated.
   /**
@@ -24,7 +24,7 @@ export default function VideoCall() {
    * Starts with a single local participant.
    * @type {[{id:number,name:string}[], Function]}
    */
-  const [participants, setParticipants] = useState(() => [{ id: user?.id || 'local', name: 'Tú', isLocal: true }]); // Usuario local siempre presente
+  const [participants, setParticipants] = useState(() => [{ id: user?.id || 'local', name: 'Tú', isLocal: true }]); // Local user always present
 
   /** Whether the local camera is enabled. */
   const [cameraOn, setCameraOn] = useState(false);
@@ -47,20 +47,20 @@ export default function VideoCall() {
    */
   const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
 
-  // Conectar a Socket.IO y obtener reunión al montar
+  // Connect to Socket.IO and get a meeting when mounting
   useEffect(() => {
     if (!meetingId || !token || !user) return;
-    const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
+    const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // Render URL deployed
     const newSocket = io(chatBackendUrl, {
       auth: { token },
-      // Agregar opciones para reconexiones
+      // Add options for reconnections
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
     });
     setSocket(newSocket);
 
-    // Obtener reunión para verificar si es creador
+    // Schedule a meeting to verify if you are a creator
     fetch(`${chatBackendUrl}/api/meetings/${meetingId}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -75,18 +75,18 @@ export default function VideoCall() {
     // Flag para evitar doble emisión
     let hasJoined = false;
 
-    // Manejar conexión inicial y reconexiones
+    // Manage initial connection and reconnections
     const handleConnect = () => {
       console.log('[FRONT] Socket conectado, uniéndose a reunión si no lo ha hecho');
       if (!hasJoined) {
         newSocket.emit('join-meeting', { meetingId, userId: user.id, name: user.name });
-        hasJoined = true;  // Marcar como unido para evitar repeticiones
+        hasJoined = true;  // Mark as joined to avoid duplicates
       }
     };
     newSocket.on('connect', handleConnect);
 
     
-    // Escuchar mensajes
+    // Listen to messages
     newSocket.on('receive-message', (data: { author: string; text: string; timestamp: string }) => {
       console.log('[FRONT] Mensaje recibido:', data);
       setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
@@ -96,42 +96,42 @@ export default function VideoCall() {
       }
     });
 
-    // Nuevo: Escuchar lista de participantes al unirse
+    // New: Listen to the list of participants when joining
     newSocket.on('participants-list', (participantsList: { userId: string; name: string }[]) => {
       console.log('[FRONT] Lista de participantes recibida:', participantsList);
-      // Actualizar participants con la lista completa, marcando local
+      // Update participants with the full list, marking local
       setParticipants(participantsList.map(p => ({
         id: p.userId,
-        name: p.userId === user.id ? 'Tú' : p.name,  // 'Tú' para el local
+        name: p.userId === user.id ? 'Tú' : p.name,  // 'You' for the local
         isLocal: p.userId === user.id
       })));
     });
 
-    // Escuchar terminación de reunión
+    // Listen to the end of the meeting
     newSocket.on('meeting-ended', (message: string) => {
       console.log('[FRONT] Reunión terminada:', message);
       setMeetingEnded(true);
       alert(message);
-      setTimeout(() => navigate('/realtime'), 3000);  // Redirigir en 3 segundos
+      setTimeout(() => navigate('/realtime'), 3000);  // Redirect in 3 seconds
     });
 
-    // Escuchar cuando un usuario se une
+    // Listen for when a user joins
     newSocket.on('user-joined', (data: { userId: string; name: string }) => {
       console.log('[FRONT] Usuario unido:', data);
       setParticipants((prev) => {
-        // Evitar duplicados y límite de 10
+        // Avoid duplicates and limit to 10
         if (prev.some(p => p.id === data.userId) || prev.length >= 10) return prev;
         return [...prev, { id: data.userId, name: data.name, isLocal: false }];
       });
     });
 
-    // Escuchar cuando un usuario sale
+    // Listen for when a user leaves
     newSocket.on('user-left', (data: { userId: string }) => {
       console.log('[FRONT] Usuario salió:', data);
       setParticipants((prev) => prev.filter(p => p.id !== data.userId));
     });
 
-    // Manejar errores
+    // Handling mistakes
     newSocket.on('error', (msg: string) => {
       console.error('[FRONT] Error de socket:', msg);
       alert(`Error: ${msg}`);
@@ -151,7 +151,7 @@ export default function VideoCall() {
    */
   function toggleChat() {
     setShowChat((s) => !s);
-    if (!showChat) {  // Si se abre el chat, quitar notificación
+    if (!showChat) {  // If the chat opens, remove the notification.
       setHasNewMessages(false);
     }
   }
@@ -192,7 +192,7 @@ export default function VideoCall() {
     if (!text || !socket || meetingEnded) return;
     const authorName = user?.name || 'Tú';  // Usar nombre real
     socket.emit('send-message', { meetingId, message: text, author: authorName });
-    setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);  // Mostrar 'Tú' para el sender
+    setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);  // Show 'You' to the sender
     setChatInput('');
   }
 
@@ -310,7 +310,7 @@ export default function VideoCall() {
           method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        // Notificar a todos via Socket.IO
+        // Notify everyone via Socket.IO
         socket?.emit('end-meeting', meetingId);
         console.log('Reunión finalizada por el creador');
       } catch (error) {
