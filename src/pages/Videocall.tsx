@@ -76,9 +76,15 @@ export default function VideoCall() {
     // Initialize Peer.js for local user (new)
     const newPeer = new Peer(user.id, {
       host: voiceBackendUrl.replace('https://', '').replace('http://', ''),
-      port: 443,  // Use 443 for HTTPS
+      port: 443,
       path: '/peerjs',
       secure: true,
+    });
+    newPeer.on('open', (id) => {
+      console.log('[FRONT] Peer.js open with ID:', id);
+    });
+    newPeer.on('error', (err) => {
+      console.error('[FRONT] Peer.js error:', err);
     });
     setPeer(newPeer);
 
@@ -378,8 +384,10 @@ export default function VideoCall() {
         }
       } catch (err: any) {
         console.error('getUserMedia error', err);
-        if (err && /NotAllowedError|SecurityError/.test(err.name)) {
-          alert('Permiso denegado para acceder a la cámara/micrófono. Concede permisos y recarga.');
+        if (err.name === 'NotAllowedError') {
+          alert('Permiso denegado. Concede permisos de micrófono en la configuración del navegador y recarga.');
+        } else if (err.name === 'NotFoundError') {
+          alert('Micrófono no encontrado. Verifica tu dispositivo.');
         }
         if (!navigator.mediaDevices) {
           setCameraOn(false);
