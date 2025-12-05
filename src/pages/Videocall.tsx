@@ -57,7 +57,6 @@ export default function VideoCall() {
     const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // Render URL deployed
     const newSocket = io(chatBackendUrl, {
       auth: { token },
-      // Add options for reconnections
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -73,6 +72,7 @@ export default function VideoCall() {
       reconnectionDelay: 1000,
     });
     setVoiceSocket(newVoiceSocket);
+
     // Initialize Peer.js for local user (new)
     const newPeer = new Peer(user.id, {
       host: voiceBackendUrl.replace('https://', '').replace('http://', ''),
@@ -82,7 +82,7 @@ export default function VideoCall() {
     });
     setPeer(newPeer);
 
-    // Schedule a meeting to verify if you are a creator
+    // Check if creator
     fetch(`${chatBackendUrl}/api/meetings/${meetingId}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -94,66 +94,53 @@ export default function VideoCall() {
       })
       .catch(err => console.error('Error obteniendo reunión:', err));
 
-    // Flag para evitar doble emisión
     let hasJoined = false;
 
-    // Manage initial connection and reconnections
+    // Chat socket events
     const handleConnect = () => {
       console.log('[FRONT] Socket conectado, uniéndose a reunión si no lo ha hecho');
       if (!hasJoined) {
         newSocket.emit('join-meeting', { meetingId, userId: user.id, name: user.name });
-        hasJoined = true;  // Mark as joined to avoid duplicates
+        hasJoined = true;
       }
     };
     newSocket.on('connect', handleConnect);
 
-    
-    // Listen to messages
     newSocket.on('receive-message', (data: { author: string; text: string; timestamp: string }) => {
       console.log('[FRONT] Mensaje recibido:', data);
       setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
-      // Notificar si el chat está cerrado
-      if (!showChat) {
-        setHasNewMessages(true);
-      }
+      if (!showChat) setHasNewMessages(true);
     });
 
-    // New: Listen to the list of participants when joining
     newSocket.on('participants-list', (participantsList: { userId: string; name: string }[]) => {
       console.log('[FRONT] Lista de participantes recibida:', participantsList);
-      // Update participants with the full list, marking local
       setParticipants(participantsList.map(p => ({
         id: p.userId,
-        name: p.userId === user.id ? 'Tú' : p.name,  // 'You' for the local
+        name: p.userId === user.id ? 'Tú' : p.name,
         isLocal: p.userId === user.id
       })));
     });
 
-    // Listen to the end of the meeting
     newSocket.on('meeting-ended', (message: string) => {
       console.log('[FRONT] Reunión terminada:', message);
       setMeetingEnded(true);
       alert(message);
-      setTimeout(() => navigate('/realtime'), 3000);  // Redirect in 3 seconds
+      setTimeout(() => navigate('/realtime'), 3000);
     });
 
-    // Listen for when a user joins
     newSocket.on('user-joined', (data: { userId: string; name: string }) => {
       console.log('[FRONT] Usuario unido:', data);
       setParticipants((prev) => {
-        // Avoid duplicates and limit to 10
         if (prev.some(p => p.id === data.userId) || prev.length >= 10) return prev;
         return [...prev, { id: data.userId, name: data.name, isLocal: false }];
       });
     });
 
-    // Listen for when a user leaves
     newSocket.on('user-left', (data: { userId: string }) => {
       console.log('[FRONT] Usuario salió:', data);
       setParticipants((prev) => prev.filter(p => p.id !== data.userId));
     });
 
-    // Handling mistakes
     newSocket.on('error', (msg: string) => {
       console.error('[FRONT] Error de socket:', msg);
       alert(`Error: ${msg}`);
@@ -164,24 +151,58 @@ export default function VideoCall() {
       console.log('[FRONT] Voice socket connected');
       newVoiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
     });
+
     newVoiceSocket.on('voice-joined', (data: { peers: string[] }) => {
       console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
       // Connect to existing peers
       data.peers.forEach(peerId => {
-        if (peer && micOn && mediaStreamRef.current) {
+        if (peer && micOn && mediaStreamRef.current && mediaStreamRef.current.getAudioTracks().length > 0) {
+          console.log('[FRONT] Calling existing peer:', peerId, 'with audio stream');
           const call = peer.call(peerId, mediaStreamRef.current);
           peerCallsRef.current.set(peerId, call);
+          call.on('stream', (remoteStream) => {
+            console.log('[FRONT] Received remote stream from existing peer:', peerId);
+            const audio = new Audio();
+            audio.srcObject = remoteStream;
+            audio.play().catch(err => console.error('Error playing remote audio:', err));
+          });
+          call.on('close', () => {
+            console.log('[FRONT] Call closed with existing peer:', peerId);
+            peerCallsRef.current.delete(peerId);
+          });
+          call.on('error', (err) => {
+            console.error('[FRONT] Call error with existing peer:', peerId, err);
+          });
+        } else {
+          console.warn('[FRONT] Cannot call existing peer:', peerId, 'micOn:', micOn, 'stream has audio:', (mediaStreamRef.current?.getAudioTracks()?.length ?? 0) > 0);
         }
       });
     });
 
     newVoiceSocket.on('peer-joined', (peerId: string) => {
       console.log('[FRONT] Peer joined voice:', peerId);
-      if (peer && micOn && mediaStreamRef.current) {
+      if (peer && micOn && mediaStreamRef.current && mediaStreamRef.current.getAudioTracks().length > 0) {
+        console.log('[FRONT] Attempting to call peer:', peerId, 'with stream:', mediaStreamRef.current.getAudioTracks().length > 0 ? 'has audio' : 'no audio');
         const call = peer.call(peerId, mediaStreamRef.current);
         peerCallsRef.current.set(peerId, call);
+        call.on('stream', (remoteStream) => {
+          console.log('[FRONT] Received remote stream from:', peerId);
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play().catch(err => console.error('Error playing remote audio:', err));
+        });
+        call.on('close', () => {
+          console.log('[FRONT] Call closed with:', peerId);
+          peerCallsRef.current.delete(peerId);
+        });
+        call.on('error', (err) => {
+          console.error('[FRONT] Call error with:', peerId, err);
+        });
+      } else {
+        console.warn('[FRONT] Cannot call peer:', peerId, 'peer:', !!peer, 'micOn:', micOn, 'stream:', !!mediaStreamRef.current);
       }
     });
+
     newVoiceSocket.on('peer-disconnected', (peerId: string) => {
       console.log('[FRONT] Peer disconnected:', peerId);
       const call = peerCallsRef.current.get(peerId);
@@ -193,12 +214,34 @@ export default function VideoCall() {
       console.error('[FRONT] Voice error:', msg);
       alert(`Voice error: ${msg}`);
     });
+
     // Peer.js events (new)
     newPeer.on('call', (call) => {
+      if (!call.peer) {
+        console.warn('[FRONT] Incoming call has no peer ID, ignoring');
+        return;
+      }
       console.log('[FRONT] Incoming call from:', call.peer);
-      if (micOn && mediaStreamRef.current) {
-        call.answer(mediaStreamRef.current);  // Answer with local stream
+      if (micOn && mediaStreamRef.current && (mediaStreamRef.current?.getAudioTracks()?.length ?? 0) > 0) {
+        console.log('[FRONT] Answering call from:', call.peer, 'with stream:', mediaStreamRef.current.getAudioTracks().length > 0 ? 'has audio' : 'no audio');
+        call.answer(mediaStreamRef.current);
         peerCallsRef.current.set(call.peer, call);
+        call.on('stream', (remoteStream) => {
+          console.log('[FRONT] Received remote stream from:', call.peer);
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+          audio.play().catch(err => console.error('Error playing remote audio:', err));
+        });
+        call.on('close', () => {
+          console.log('[FRONT] Incoming call closed with:', call.peer);
+          peerCallsRef.current.delete(call.peer);
+        });
+        call.on('error', (err) => {
+          console.error('[FRONT] Incoming call error with:', call.peer, err);
+        });
+      } else {
+        console.warn('[FRONT] Rejecting call from:', call.peer, 'micOn:', micOn, 'stream:', !!mediaStreamRef.current);
+        call.close();  // Rechazar si no hay micrófono
       }
     });
 
@@ -336,7 +379,7 @@ export default function VideoCall() {
       } catch (err: any) {
         console.error('getUserMedia error', err);
         if (err && /NotAllowedError|SecurityError/.test(err.name)) {
-          alert('Permiso denegado para acceder a la cámara/micrófono.');
+          alert('Permiso denegado para acceder a la cámara/micrófono. Concede permisos y recarga.');
         }
         if (!navigator.mediaDevices) {
           setCameraOn(false);
@@ -348,20 +391,22 @@ export default function VideoCall() {
     ensureMedia();
 
     // Update Peer calls when mic changes (new)
-    if (peer && mediaStreamRef.current) {
+    if (peer && mediaStreamRef.current && mediaStreamRef.current.getAudioTracks().length > 0) {
       if (micOn) {
-        // Re-call existing peers with updated stream
-        peerCallsRef.current.forEach(call => {
-          call.close();
-        });
+        console.log('[FRONT] Mic activated, re-calling all peers with new stream');
+        // Close existing calls
+        peerCallsRef.current.forEach(call => call.close());
         peerCallsRef.current.clear();
-        // Re-emit join to reconnect (add null check for user)
+        // Re-emit join to reconnect
         if (user) voiceSocket?.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
       } else {
+        console.log('[FRONT] Mic deactivated, closing all calls');
         // Close all calls
         peerCallsRef.current.forEach(call => call.close());
         peerCallsRef.current.clear();
       }
+    } else if (micOn) {
+      console.warn('[FRONT] Mic is on but no valid audio stream available');
     }
 
     return () => { mounted = false; };
@@ -386,10 +431,10 @@ export default function VideoCall() {
   }, [socket, voiceSocket, peer]);
 
   /**
-   * Hang up the call: clears participants and chat, then navigates back to the realtime landing.
-   * If the user is the creator, ends the meeting in the database and notifies others.
-   * @returns {void}
-   */
+ * Hang up the call: clears participants and chat, then navigates back to the realtime landing.
+ * If the user is the creator, ends the meeting in the database and notifies others.
+ * @returns {void}
+ */
   async function hangup() {
     if (isCreator && meetingId && token) {
       try {
@@ -406,7 +451,7 @@ export default function VideoCall() {
       }
     }
     // Disconnect from voice room (new)
-    voiceSocket?.emit('leave-voice-room', meetingId);
+    if (user) voiceSocket?.emit('leave-voice-room', { meetingId, peerId: user.id });
     // reset state if desired
     setParticipants([]);
     setShowChat(false);
