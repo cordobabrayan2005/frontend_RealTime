@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import io, { Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';  // To obtain token and username
+import Peer from 'peerjs';
 
 /**
  * VideoCall React component.
@@ -17,6 +18,9 @@ export default function VideoCall() {
   const [isCreator, setIsCreator] = useState(false);  // If the user is the creator
   const [showCode, setShowCode] = useState(false);  // To show/hide the code modal
   const [meetingEnded, setMeetingEnded] = useState(false);  // If the meeting ended
+  const [voiceSocket, setVoiceSocket] = useState<Socket | null>(null);  // Separate socket for voice
+  const [peer, setPeer] = useState<Peer | null>(null);  // Peer.js instance for WebRTC
+  const peerCallsRef = useRef<Map<string, any>>(new Map());  // Track active Peer calls
 
   // Start with a single participant (the current user). More participants can be simulated.
   /**
@@ -59,6 +63,24 @@ export default function VideoCall() {
       reconnectionDelay: 1000,
     });
     setSocket(newSocket);
+
+    // Voice backend connection (new)
+    const voiceBackendUrl = 'https://realtimevoicebackend.onrender.com';  // Replace with actual Render URL after deployment
+    const newVoiceSocket = io(voiceBackendUrl, {
+      auth: { token },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+    setVoiceSocket(newVoiceSocket);
+    // Initialize Peer.js for local user (new)
+    const newPeer = new Peer(user.id, {
+      host: voiceBackendUrl.replace('https://', '').replace('http://', ''),
+      port: 443,  // Use 443 for HTTPS
+      path: '/peerjs',
+      secure: true,
+    });
+    setPeer(newPeer);
 
     // Schedule a meeting to verify if you are a creator
     fetch(`${chatBackendUrl}/api/meetings/${meetingId}`, {
@@ -137,10 +159,55 @@ export default function VideoCall() {
       alert(`Error: ${msg}`);
     });
 
+    // Voice socket and Peer.js events (new)
+    newVoiceSocket.on('connect', () => {
+      console.log('[FRONT] Voice socket connected');
+      newVoiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
+    });
+    newVoiceSocket.on('voice-joined', (data: { peers: string[] }) => {
+      console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
+      // Connect to existing peers
+      data.peers.forEach(peerId => {
+        if (peer && micOn && mediaStreamRef.current) {
+          const call = peer.call(peerId, mediaStreamRef.current);
+          peerCallsRef.current.set(peerId, call);
+        }
+      });
+    });
+
+    newVoiceSocket.on('peer-joined', (peerId: string) => {
+      console.log('[FRONT] Peer joined voice:', peerId);
+      if (peer && micOn && mediaStreamRef.current) {
+        const call = peer.call(peerId, mediaStreamRef.current);
+        peerCallsRef.current.set(peerId, call);
+      }
+    });
+    newVoiceSocket.on('peer-disconnected', (peerId: string) => {
+      console.log('[FRONT] Peer disconnected:', peerId);
+      const call = peerCallsRef.current.get(peerId);
+      if (call) call.close();
+      peerCallsRef.current.delete(peerId);
+    });
+
+    newVoiceSocket.on('voice-error', (msg: string) => {
+      console.error('[FRONT] Voice error:', msg);
+      alert(`Voice error: ${msg}`);
+    });
+    // Peer.js events (new)
+    newPeer.on('call', (call) => {
+      console.log('[FRONT] Incoming call from:', call.peer);
+      if (micOn && mediaStreamRef.current) {
+        call.answer(mediaStreamRef.current);  // Answer with local stream
+        peerCallsRef.current.set(call.peer, call);
+      }
+    });
+
     return () => {
-      console.log('[FRONT] Cleanup: desconectando socket');
+      console.log('[FRONT] Cleanup: desconectando socket y el peer');
       newSocket.off('connect', handleConnect);
       newSocket.disconnect();
+      newVoiceSocket.disconnect();
+      newPeer.destroy();
     };
   }, [meetingId, token, user?.id]);
 
@@ -280,8 +347,25 @@ export default function VideoCall() {
 
     ensureMedia();
 
+    // Update Peer calls when mic changes (new)
+    if (peer && mediaStreamRef.current) {
+      if (micOn) {
+        // Re-call existing peers with updated stream
+        peerCallsRef.current.forEach(call => {
+          call.close();
+        });
+        peerCallsRef.current.clear();
+        // Re-emit join to reconnect (add null check for user)
+        if (user) voiceSocket?.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
+      } else {
+        // Close all calls
+        peerCallsRef.current.forEach(call => call.close());
+        peerCallsRef.current.clear();
+      }
+    }
+
     return () => { mounted = false; };
-  }, [cameraOn, micOn]);
+  }, [cameraOn, micOn, peer, voiceSocket, meetingId, user?.id]);
 
   // cleanup on unmount
   useEffect(() => {
@@ -294,8 +378,12 @@ export default function VideoCall() {
       if (s) s.getTracks().forEach(t => t.stop());
       mediaStreamRef.current = null;
       if (socket) socket.disconnect();
+      if (voiceSocket) voiceSocket.disconnect();
+      if (peer) peer.destroy();
+      peerCallsRef.current.forEach(call => call.close());
+      peerCallsRef.current.clear();
     };
-  }, [socket]);
+  }, [socket, voiceSocket, peer]);
 
   /**
    * Hang up the call: clears participants and chat, then navigates back to the realtime landing.
@@ -317,6 +405,8 @@ export default function VideoCall() {
         console.error('Error finalizando reunión:', error);
       }
     }
+    // Disconnect from voice room (new)
+    voiceSocket?.emit('leave-voice-room', meetingId);
     // reset state if desired
     setParticipants([]);
     setShowChat(false);
