@@ -59,6 +59,53 @@ export default function VideoCall() {
   /** Ref that holds the current MediaStream for local audio/video. */
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
+  // ==================== PEDIR PERMISOS DE MICRÓFONO INMEDIATAMENTE ====================
+  useEffect(() => {
+    // Pedir permisos de micrófono inmediatamente al cargar el componente
+    async function requestMicrophonePermission() {
+      try {
+        console.log('[FRONT] Solicitando permiso de micrófono...');
+        
+        // Solo pedir audio, no video (para no asustar al usuario)
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false // No pedir cámara inicialmente
+        });
+        
+        console.log('[FRONT] ✅ Permiso de micrófono concedido');
+        
+        // Guardar el stream temporalmente
+        mediaStreamRef.current = stream;
+        
+        // Detener los tracks temporalmente (los usaremos después)
+        stream.getTracks().forEach(track => {
+          track.stop();
+        });
+        
+        // El micrófono está activado por defecto
+        setMicOn(true);
+        
+      } catch (err: any) {
+        console.error('[FRONT] ❌ Error al obtener permiso de micrófono:', err);
+        
+        if (err.name === 'NotAllowedError') {
+          alert('Para usar la llamada de voz, necesitas permitir el acceso al micrófono. Por favor:\n\n1. Haz clic en el ícono de candado en la barra de direcciones\n2. Busca "Micrófono"\n3. Selecciona "Permitir"\n4. Recarga la página');
+        }
+        
+        setMicOn(false);
+      }
+    }
+    
+    // Solo pedir permisos si tenemos meetingId
+    if (meetingId) {
+      requestMicrophonePermission();
+    }
+  }, [meetingId]);
+
   // Connect to Socket.IO and get a meeting when mounting
   useEffect(() => {
     if (!meetingId || !token || !user) return;
@@ -87,21 +134,22 @@ export default function VideoCall() {
     setVoiceSocket(newVoiceSocket);
 
     // 3. Peer.js - CONFIGURACIÓN CORREGIDA
-    console.log('[FRONT] Inicializando Peer.js con ID:', user.id);
+    console.log('[FRONT] Inicializando Peer.js para servidor en Render...');
     
-    // IMPORTANTE: Usar el constructor correcto con el ID primero
+    // IMPORTANTE: NO especificar puerto, dejar que Peer.js lo detecte automáticamente
     const newPeer = new Peer(user.id, {
-      // Configuración para Render
+      // URL del servidor Peer.js
       host: 'realtimevoicebackend.onrender.com',
-      secure: true,
+      // NO especificar port (Render maneja esto)
       path: '/peerjs',
-      debug: 2, // Para ver logs de error
+      secure: true, // Siempre HTTPS en producción
+      debug: 3, // Máximo nivel de debug
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' }
         ]
       }
     });
@@ -180,13 +228,22 @@ export default function VideoCall() {
 
     // Peer.js events
     newPeer.on('open', (id) => {
-      console.log('[FRONT] Peer.js conectado con ID:', id);
+      console.log('[FRONT] ✅ Peer.js conectado con ID:', id);
       // Ahora unirse a la sala de voz
       newVoiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
     });
 
     newPeer.on('error', (err) => {
-      console.error('[FRONT] Peer.js error:', err);
+      console.error('[FRONT] ❌ Error de Peer.js:', err.type, err.message);
+      // Si es error de conexión, intentar reconectar
+      if (err.type === 'network' || err.type === 'disconnected') {
+        console.log('[FRONT] 🔄 Intentando reconectar Peer.js en 3 segundos...');
+        setTimeout(() => {
+          if (newPeer && !newPeer.destroyed) {
+            newPeer.reconnect();
+          }
+        }, 3000);
+      }
     });
 
     // Voice socket events para señalización
@@ -373,10 +430,6 @@ export default function VideoCall() {
 
     /**
      * Ensure the local media stream matches the desired camera/mic state.
-     * Requests getUserMedia when needed, reuses or replaces the existing stream,
-     * and stops tracks when no longer required.
-     *
-     * @returns {Promise<void>}
      */
     async function ensureMedia() {
       try {
@@ -384,71 +437,82 @@ export default function VideoCall() {
         const desiredAudio = !!micOn;
         const current = mediaStreamRef.current;
 
-        // If nothing is desired, ensure we release any existing stream
-        if (!desiredVideo && !desiredAudio) {
-          if (current) {
-            current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
-            mediaStreamRef.current = null;
-            if (localVideoRef.current) localVideoRef.current.srcObject = null;
-          }
-          return;
-        }
-
-        // If there is no current stream, just request one with desired constraints
-        if (!current) {
+        // Si el micrófono está activado pero no tenemos stream, pedirlo
+        if (desiredAudio && !current) {
+          console.log('[FRONT] Obteniendo stream de audio...');
           const stream = await navigator.mediaDevices.getUserMedia({ 
             video: desiredVideo, 
             audio: desiredAudio 
           });
-          if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
-          mediaStreamRef.current = stream;
-          if (localVideoRef.current && stream.getVideoTracks().length) {
-            try { localVideoRef.current.srcObject = stream; await localVideoRef.current.play(); } catch (e) { /* ignore */ }
+          
+          if (!mounted) { 
+            stream.getTracks().forEach(t => t.stop()); 
+            return; 
           }
+          
+          mediaStreamRef.current = stream;
+          
+          if (desiredVideo && localVideoRef.current && stream.getVideoTracks().length) {
+            try { 
+              localVideoRef.current.srcObject = stream; 
+              await localVideoRef.current.play(); 
+            } catch (e) { /* ignore */ }
+          }
+          
           return;
         }
 
-        // There is a current stream. If its tracks already match desired constraints, just enable/disable them.
-        const hasVideo = current.getVideoTracks().length > 0;
-        const hasAudio = current.getAudioTracks().length > 0;
-
-        if (hasVideo === desiredVideo && hasAudio === desiredAudio) {
-          // Toggle enabled flags to reflect current desired state
-          current.getVideoTracks().forEach(t => t.enabled = desiredVideo);
-          current.getAudioTracks().forEach(t => t.enabled = desiredAudio);
-          return;
+        // Si tenemos stream, actualizar los tracks
+        if (current) {
+          const videoTrack = current.getVideoTracks()[0];
+          const audioTrack = current.getAudioTracks()[0];
+          
+          if (videoTrack) {
+            videoTrack.enabled = desiredVideo;
+          }
+          
+          if (audioTrack) {
+            audioTrack.enabled = desiredAudio;
+          }
+          
+          // Si necesitamos video pero no tenemos track de video
+          if (desiredVideo && !videoTrack) {
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+              video: true, 
+              audio: desiredAudio 
+            });
+            
+            if (!mounted) { 
+              newStream.getTracks().forEach(t => t.stop()); 
+              return; 
+            }
+            
+            // Detener stream anterior y reemplazar
+            current.getTracks().forEach(t => t.stop());
+            mediaStreamRef.current = newStream;
+            
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = newStream;
+              localVideoRef.current.play().catch(console.error);
+            }
+          }
         }
 
-        // Otherwise, re-request a fresh stream with the exact desired constraints and replace the old one.
-        const newStream = await navigator.mediaDevices.getUserMedia({ video: desiredVideo, audio: desiredAudio });
-        if (!mounted) { newStream.getTracks().forEach(t => t.stop()); return; }
-
-        // Stop old tracks
-        try {
-          current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
-        } catch (e) { /* ignore */ }
-
-        mediaStreamRef.current = newStream;
-        if (localVideoRef.current) {
-          try { localVideoRef.current.srcObject = newStream; if (newStream.getVideoTracks().length) await localVideoRef.current.play(); } catch (e) { /* ignore */ }
-        }
       } catch (err: any) {
-        console.error('getUserMedia error', err);
+        console.error('[FRONT] Error en getUserMedia:', err);
+        
         if (err.name === 'NotAllowedError') {
-          alert('Permiso denegado. Concede permisos de micrófono en la configuración del navegador y recarga.');
-        } else if (err.name === 'NotFoundError') {
-          alert('Micrófono no encontrado. Verifica tu dispositivo.');
+          alert('Permiso denegado para micrófono/cámara. Para usar la llamada de voz:\n\n1. Haz clic en el ícono de candado 🔒\n2. Busca "Micrófono" o "Cámara"\n3. Selecciona "Permitir"\n4. Recarga la página');
         }
-        if (!navigator.mediaDevices) {
-          setCameraOn(false);
-          setMicOn(false);
-        }
+        
+        setCameraOn(false);
+        setMicOn(false);
       }
     }
 
     ensureMedia();
 
-    // Cuando el micrófono cambia, re-conectar con los peers
+    // Cuando el micrófono se activa/desactiva
     if (peer && voiceSocket && user && meetingId) {
       if (micOn && mediaStreamRef.current) {
         console.log('[FRONT] Mic activado, reconectando a sala de voz');
