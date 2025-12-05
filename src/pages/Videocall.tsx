@@ -20,6 +20,7 @@ export default function VideoCall() {
   const [meetingEnded, setMeetingEnded] = useState(false);  // If the meeting ended
   const [voiceSocket, setVoiceSocket] = useState<Socket | null>(null);  // Separate socket for voice
   const [peer, setPeer] = useState<Peer | null>(null);  // Peer.js instance for WebRTC
+  const [peerStatus, setPeerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const peerCallsRef = useRef<Map<string, any>>(new Map());  // Track active Peer calls
 
   // Start with a single participant (the current user). More participants can be simulated.
@@ -58,6 +59,12 @@ export default function VideoCall() {
 
   /** Ref that holds the current MediaStream for local audio/video. */
   const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  // URLs desde variables de entorno o defaults
+  const CHAT_BACKEND_URL = import.meta.env.VITE_CHAT_BACKEND_URL || 'https://realtimechatbackend-87nm.onrender.com';
+  const VOICE_BACKEND_URL = import.meta.env.VITE_VOICE_BACKEND_URL || 'https://realtimevoicebackend.onrender.com';
+  const PEERJS_HOST = import.meta.env.VITE_PEERJS_HOST || 'realtimevoicebackend.onrender.com';
+  const PEERJS_PATH = import.meta.env.VITE_PEERJS_PATH || '/peerjs';
 
   // ==================== PEDIR PERMISOS DE MICRÓFONO INMEDIATAMENTE ====================
   useEffect(() => {
@@ -110,13 +117,16 @@ export default function VideoCall() {
   useEffect(() => {
     if (!meetingId || !token || !user) return;
     
-    const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // Render URL deployed
-    const voiceBackendUrl = 'https://realtimevoicebackend.onrender.com';
-
     console.log('[FRONT] Inicializando videollamada para reunión:', meetingId);
+    console.log('[FRONT] Configuración:', {
+      chatBackend: CHAT_BACKEND_URL,
+      voiceBackend: VOICE_BACKEND_URL,
+      peerHost: PEERJS_HOST,
+      peerPath: PEERJS_PATH
+    });
 
     // 1. Socket de chat
-    const newSocket = io(chatBackendUrl, {
+    const newSocket = io(CHAT_BACKEND_URL, {
       auth: { token },
       reconnection: true,
       reconnectionAttempts: 5,
@@ -125,7 +135,7 @@ export default function VideoCall() {
     setSocket(newSocket);
 
     // 2. Socket de voz
-    const newVoiceSocket = io(voiceBackendUrl, {
+    const newVoiceSocket = io(VOICE_BACKEND_URL, {
       auth: { token },
       reconnection: true,
       reconnectionAttempts: 5,
@@ -133,31 +143,53 @@ export default function VideoCall() {
     });
     setVoiceSocket(newVoiceSocket);
 
-    // 3. Peer.js - CONFIGURACIÓN CORREGIDA
+    let connectionTimeout: NodeJS.Timeout;
+
+    // 3. Peer.js - CONFIGURACIÓN CORREGIDA PARA RENDER
     console.log('[FRONT] Inicializando Peer.js para servidor en Render...');
     
-    // IMPORTANTE: NO especificar puerto, dejar que Peer.js lo detecte automáticamente
+    // CONFIGURACIÓN CORRECTA PARA RENDER:
     const newPeer = new Peer(user.id, {
-      // URL del servidor Peer.js
-      host: 'realtimevoicebackend.onrender.com',
-      // NO especificar port (Render maneja esto)
-      path: '/peerjs',
-      secure: true, // Siempre HTTPS en producción
-      debug: 3, // Máximo nivel de debug
+      host: PEERJS_HOST,
+      path: PEERJS_PATH,
+      secure: true, // SIEMPRE HTTPS en Render
+      port: 443, // IMPORTANTE: Render usa HTTPS en puerto 443
+      debug: 1, // Reducir debug para menos logs
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' }
+          { urls: 'stun:stun1.l.google.com:19302' }
         ]
       }
     });
     
     setPeer(newPeer);
+    setPeerStatus('connecting');
+
+    // Timeout de 20 segundos para conexión Peer.js
+    connectionTimeout = setTimeout(() => {
+      if (newPeer && !newPeer.disconnected) {
+        console.log('[FRONT] ⏱️ Timeout de conexión Peer.js (20s)');
+        setPeerStatus('error');
+        
+        // Intentar crear un nuevo Peer con ID diferente
+        const newPeerWithTimeout = new Peer(`${user.id}_${Date.now()}`, {
+          host: PEERJS_HOST,
+          path: PEERJS_PATH,
+          secure: true,
+          port: 443,
+          debug: 0,
+          config: {
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+          }
+        });
+        
+        setPeer(newPeerWithTimeout);
+      }
+    }, 20000);
 
     // Check if creator
-    fetch(`${chatBackendUrl}/api/meetings/${meetingId}`, {
+    fetch(`${CHAT_BACKEND_URL}/api/meetings/${meetingId}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
       .then(res => res.json())
@@ -223,26 +255,55 @@ export default function VideoCall() {
     // Voice socket events
     newVoiceSocket.on('connect', () => {
       console.log('[FRONT] Voice socket connected');
-      // Esperar a que Peer.js esté listo
     });
 
     // Peer.js events
     newPeer.on('open', (id) => {
+      clearTimeout(connectionTimeout);
       console.log('[FRONT] ✅ Peer.js conectado con ID:', id);
-      // Ahora unirse a la sala de voz
-      newVoiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
+      setPeerStatus('connected');
+      
+      // Esperar 1 segundo antes de unirse a la sala
+      setTimeout(() => {
+        newVoiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
+      }, 1000);
     });
 
     newPeer.on('error', (err) => {
       console.error('[FRONT] ❌ Error de Peer.js:', err.type, err.message);
-      // Si es error de conexión, intentar reconectar
-      if (err.type === 'network' || err.type === 'disconnected') {
-        console.log('[FRONT] 🔄 Intentando reconectar Peer.js en 3 segundos...');
+      
+      // Si es error de WebSocket (código 1006)
+      if (err.type === 'network' || err.type === 'disconnected' || err.message.includes('1006') || err.message.includes('Lost connection')) {
+        console.log('[FRONT] 🔄 Error WebSocket detectado. Intentando solución...');
+        setPeerStatus('error');
+        
+        // Esperar 10 segundos antes de reconectar
         setTimeout(() => {
           if (newPeer && !newPeer.destroyed) {
-            newPeer.reconnect();
+            console.log('[FRONT] Reconectando Peer.js...');
+            setPeerStatus('connecting');
+            
+            try {
+              newPeer.reconnect();
+            } catch (reconnectErr) {
+              console.error('[FRONT] Error al reconectar:', reconnectErr);
+              
+              // Si falla, crear un nuevo Peer
+              const newPeerInstance = new Peer(`${user.id}_${Date.now()}`, {
+                host: PEERJS_HOST,
+                path: PEERJS_PATH,
+                secure: true,
+                port: 443,
+                debug: 0,
+                config: {
+                  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                }
+              });
+              
+              setPeer(newPeerInstance);
+            }
           }
-        }, 3000);
+        }, 10000);
       }
     });
 
@@ -258,7 +319,7 @@ export default function VideoCall() {
             initiateCall(newPeer, peerId);
           }
         });
-      }, 1000);
+      }, 1500);
     });
 
     newVoiceSocket.on('peer-joined', (peerId: string) => {
@@ -269,7 +330,7 @@ export default function VideoCall() {
         if (newPeer && micOn && mediaStreamRef.current) {
           initiateCall(newPeer, peerId);
         }
-      }, 1000);
+      }, 1500);
     });
 
     newVoiceSocket.on('peer-disconnected', (peerId: string) => {
@@ -327,10 +388,11 @@ export default function VideoCall() {
 
     return () => {
       console.log('[FRONT] Cleanup: desconectando socket y el peer');
+      clearTimeout(connectionTimeout);
       newSocket.off('connect', handleConnect);
       newSocket.disconnect();
       newVoiceSocket.disconnect();
-      newPeer.destroy();
+      if (newPeer) newPeer.destroy();
     };
   }, [meetingId, token, user?.id]);
 
@@ -555,7 +617,7 @@ export default function VideoCall() {
   async function hangup() {
     if (isCreator && meetingId && token) {
       try {
-        const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';
+        const chatBackendUrl = CHAT_BACKEND_URL;
         await fetch(`${chatBackendUrl}/api/meetings/${meetingId}/end`, {
           method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}` },
