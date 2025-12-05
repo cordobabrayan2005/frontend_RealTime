@@ -1,66 +1,44 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import io, { Socket } from 'socket.io-client';
+import io from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
 import Peer from 'peerjs';
 
-/**
- * VideoCall React component.
- * Manages local media (camera/microphone), a simulated participants list and an in-call chat UI.
- *
- * @returns {JSX.Element} The video call page element.
- */
 export default function VideoCall() {
   const location = useLocation();
-  const navigate = useNavigate(); // MOVIDO AQUÍ ARRIBA - Esto arregla el error
+  const navigate = useNavigate();
   const meetingId = (location.state as any)?.meetingId;
   const { token, user } = useAuthStore();
 
-  // Estados añadidos para mejor gestión
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-  const [peerInstance, setPeerInstance] = useState<Peer | null>(null);
-  const [voiceSocket, setVoiceSocket] = useState<Socket | null>(null);
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [isCreator, setIsCreator] = useState(false);
-  const [showCode, setShowCode] = useState(false);
-  const [meetingEnded, setMeetingEnded] = useState(false);
-
-  // Ref para elementos de audio (mejora de gestión)
-  const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-
-  // Los otros estados permanecen igual...
-  const [participants, setParticipants] = useState(() => [{ id: user?.id || 'local', name: 'Tú', isLocal: true }]);
+  // Estados
+  const [participants, setParticipants] = useState([{ id: user?.id || 'local', name: 'Tú', isLocal: true }]);
   const [cameraOn, setCameraOn] = useState(false);
-  const [micOn, setMicOn] = useState(false);
+  const [micOn, setMicOn] = useState(true); // MICRÓFONO ACTIVADO POR DEFECTO
   const [showChat, setShowChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [hasNewMessages, setHasNewMessages] = useState(false);
-  const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
+  const [messages, setMessages] = useState([{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
+  const [showCode, setShowCode] = useState(false);
+  const [meetingEnded, setMeetingEnded] = useState(false);
+  const [isCreator, setIsCreator] = useState(false);
 
-  // Refs (añadido uno para audioElements)
+  // Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const peerCallsRef = useRef<Map<string, any>>(new Map());
+  const socketRef = useRef<any>(null);
+  const voiceSocketRef = useRef<any>(null);
   const peerRef = useRef<Peer | null>(null);
+  const callsRef = useRef<Map<string, any>>(new Map());
+  const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
-  // URLs de backend
+  // URLs
   const CHAT_BACKEND_URL = 'https://realtimechatbackend-87nm.onrender.com';
   const VOICE_BACKEND_URL = 'https://realtimevoicebackend.onrender.com';
 
-  // ==================== FUNCIÓN MEJORADA PARA INICIAR LLAMADAS ====================
-
-  const initiateCall = useCallback((peerId: string) => {
-    if (!peerRef.current || !mediaStreamRef.current || peerId === user?.id) return;
-
-    const audioTrack = mediaStreamRef.current.getAudioTracks()[0];
-    if (!audioTrack || audioTrack.readyState !== 'live') {
-      console.warn('[FRONT] No hay track de audio válido para llamar a:', peerId);
-      return;
-    }
-
-    // Verificar si ya hay una llamada activa
-    if (peerCallsRef.current.has(peerId)) {
-      console.log('[FRONT] Ya hay llamada activa con:', peerId);
+  // ==================== INICIAR LLAMADA ====================
+  const startCall = useRef((peerId: string) => {
+    if (!peerRef.current || !mediaStreamRef.current || peerId === user?.id) {
+      console.log('[FRONT] No se puede iniciar llamada:', peerId);
       return;
     }
 
@@ -69,10 +47,10 @@ export default function VideoCall() {
     try {
       const call = peerRef.current.call(peerId, mediaStreamRef.current);
 
-      call.on('stream', (remoteStream) => {
-        console.log('[FRONT] Stream recibido de:', peerId);
+      call.on('stream', (remoteStream: MediaStream) => {
+        console.log('[FRONT] Stream de audio recibido de:', peerId);
 
-        // Reutilizar o crear elemento de audio
+        // Crear o reutilizar elemento de audio
         let audio = audioElementsRef.current.get(peerId);
         if (!audio) {
           audio = new Audio();
@@ -83,184 +61,123 @@ export default function VideoCall() {
         audio.volume = 1.0;
 
         audio.play().catch(err => {
-          console.warn('[FRONT] Error reproduciendo audio, intentando silenciado:', err);
+          console.warn('[FRONT] Error reproduciendo audio, intentando muted:', err);
           audio.muted = true;
-          audio.play().then(() => {
-            audio.muted = false;
-          }).catch(e => console.error('[FRONT] Falló reproducción:', e));
+          audio.play().catch(e => console.error('[FRONT] Falló reproducción:', e));
         });
       });
 
       call.on('close', () => {
         console.log('[FRONT] Llamada cerrada con:', peerId);
-        cleanupPeerConnection(peerId);
+        callsRef.current.delete(peerId);
+
+        const audio = audioElementsRef.current.get(peerId);
+        if (audio) {
+          audio.pause();
+          audio.srcObject = null;
+          audioElementsRef.current.delete(peerId);
+        }
       });
 
       call.on('error', (err) => {
-        console.error('[FRONT] Error en llamada con:', peerId, err);
-        cleanupPeerConnection(peerId);
+        console.error('[FRONT] Error en llamada:', peerId, err);
+        callsRef.current.delete(peerId);
       });
 
-      peerCallsRef.current.set(peerId, call);
+      callsRef.current.set(peerId, call);
 
     } catch (error) {
       console.error('[FRONT] Error iniciando llamada:', error);
     }
-  }, [user?.id]);
+  });
 
-  const cleanupPeerConnection = useCallback((peerId: string) => {
-    const call = peerCallsRef.current.get(peerId);
-    if (call) {
-      try { call.close(); } catch (e) { }
-      peerCallsRef.current.delete(peerId);
-    }
-
-    const audio = audioElementsRef.current.get(peerId);
-    if (audio) {
-      audio.pause();
-      audio.srcObject = null;
-      audioElementsRef.current.delete(peerId);
-    }
-  }, []);
-
-  // ==================== CONEXIÓN MEJORADA ====================
-
+  // ==================== INICIALIZACIÓN ====================
   useEffect(() => {
-    if (!meetingId || !token || !user) return;
+    if (!meetingId || !token || !user) {
+      console.error('[FRONT] Faltan datos para la videollamada');
+      navigate('/realtime');
+      return;
+    }
 
-    // Chat socket (manteniendo la configuración original)
-    const newSocket = io(CHAT_BACKEND_URL, {
+    console.log('[FRONT] Inicializando videollamada para reunión:', meetingId);
+
+    // 1. Socket de chat
+    const socket = io(CHAT_BACKEND_URL, {
       auth: { token },
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnection: true
     });
-    setSocket(newSocket);
+    socketRef.current = socket;
 
-    // Voice socket con configuración mejorada
-    const newVoiceSocket = io(VOICE_BACKEND_URL, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      forceNew: true
+    // 2. Socket de voz - CONFIGURACIÓN SIMPLE
+    const voiceSocket = io(VOICE_BACKEND_URL, {
+      auth: { token }
     });
-    setVoiceSocket(newVoiceSocket);
+    voiceSocketRef.current = voiceSocket;
 
-    // Peer.js CONFIGURACIÓN CORREGIDA
-    const newPeer = new Peer(user.id, {
+    // 3. Peer.js - CONFIGURACIÓN SIMPLIFICADA
+    const peer = new Peer({
+      host: 'realtimevoicebackend.onrender.com',
+      port: 443,
+      path: '/peerjs',
+      secure: true,
+      debug: 0, // Menos logs
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
         ]
-      },
-      debug: 2, // Solo errores
-      host: 'realtimevoicebackend.onrender.com',
-      secure: true,
-      path: '/peerjs',
-      port: 443
-    });
-
-    newPeer.on('open', (id) => {
-      console.log('[FRONT] Peer.js conectado con ID:', id);
-      setConnectionStatus('connected');
-
-      // Notificar al servidor
-      if (newVoiceSocket && meetingId) {
-        newVoiceSocket.emit('join-voice-room', {
-          meetingId,
-          peerId: id,
-          userId: user.id
-        });
       }
     });
+    peerRef.current = peer;
 
-    newPeer.on('error', (err) => {
-      console.error('[FRONT] Peer.js error:', err);
-      setConnectionStatus('disconnected');
+    console.log('[FRONT] Peer.js inicializado con ID:', user.id);
 
-      // Reconexión automática
-      if (err.type === 'network' || err.type === 'disconnected') {
-        setTimeout(() => {
-          if (newPeer && !newPeer.disconnected) {
-            newPeer.reconnect();
-          }
-        }, 2000);
-      }
+    // Eventos de chat
+    socket.on('connect', () => {
+      console.log('[FRONT] Chat conectado');
+      socket.emit('join-meeting', {
+        meetingId,
+        userId: user.id,
+        name: user.name
+      });
     });
 
-    newPeer.on('disconnected', () => {
-      console.log('[FRONT] Peer.js desconectado, reconectando...');
-      setConnectionStatus('disconnected');
-      newPeer.reconnect();
+    socket.on('receive-message', (data: { author: string; text: string }) => {
+      setMessages(prev => [...prev, {
+        id: prev.length + 1,
+        author: data.author,
+        text: data.text
+      }]);
+      if (!showChat) setHasNewMessages(true);
     });
 
-    // Manejo de llamadas entrantes (MEJORADO)
-    newPeer.on('call', (call) => {
-      if (!call.peer) {
-        console.warn('[FRONT] Llamada sin peer ID, ignorando');
-        return;
-      }
-
-      console.log('[FRONT] Llamada entrante de:', call.peer);
-
-      if (micOn && mediaStreamRef.current) {
-        const audioTrack = mediaStreamRef.current.getAudioTracks()[0];
-        if (audioTrack && audioTrack.readyState === 'live') {
-          console.log('[FRONT] Contestando llamada con audio');
-          call.answer(mediaStreamRef.current);
-
-          call.on('stream', (remoteStream) => {
-            console.log('[FRONT] Stream remoto recibido de:', call.peer);
-
-            // Reutilizar elemento de audio
-            let audio = audioElementsRef.current.get(call.peer);
-            if (!audio) {
-              audio = new Audio();
-              audioElementsRef.current.set(call.peer, audio);
-            }
-
-            audio.srcObject = remoteStream;
-            audio.volume = 1.0;
-
-            audio.play().catch(err => {
-              console.warn('[FRONT] Error reproduciendo audio, intentando silenciado:', err);
-              audio.muted = true;
-              audio.play().then(() => {
-                audio.muted = false;
-              }).catch(e => console.error('[FRONT] Falló reproducción:', e));
-            });
-          });
-
-          call.on('close', () => {
-            console.log('[FRONT] Llamada cerrada con:', call.peer);
-            cleanupPeerConnection(call.peer);
-          });
-
-          call.on('error', (err) => {
-            console.error('[FRONT] Error en llamada:', call.peer, err);
-            cleanupPeerConnection(call.peer);
-          });
-
-          peerCallsRef.current.set(call.peer, call);
-        } else {
-          console.warn('[FRONT] Sin stream de audio válido, rechazando llamada');
-          call.close();
-        }
-      } else {
-        console.warn('[FRONT] Micrófono apagado, rechazando llamada');
-        call.close();
-      }
+    socket.on('participants-list', (participantsList: { userId: string; name: string }[]) => {
+      setParticipants(participantsList.map(p => ({
+        id: p.userId,
+        name: p.userId === user.id ? 'Tú' : p.name,
+        isLocal: p.userId === user.id
+      })));
     });
 
-    setPeerInstance(newPeer);
-    peerRef.current = newPeer;
+    socket.on('meeting-ended', (message: string) => {
+      setMeetingEnded(true);
+      alert(message);
+      setTimeout(() => navigate('/realtime'), 3000);
+    });
+
+    socket.on('user-joined', (data: { userId: string; name: string }) => {
+      setParticipants(prev => {
+        if (prev.some(p => p.id === data.userId) || prev.length >= 10) return prev;
+        return [...prev, { id: data.userId, name: data.name, isLocal: false }];
+      });
+    });
+
+    socket.on('user-left', (data: { userId: string }) => {
+      setParticipants(prev => prev.filter(p => p.id !== data.userId));
+    });
 
     // Verificar si es creador
     fetch(`${CHAT_BACKEND_URL}/api/meetings/${meetingId}`, {
@@ -272,322 +189,261 @@ export default function VideoCall() {
           setIsCreator(true);
         }
       })
-      .catch(err => console.error('Error obteniendo reunión:', err));
+      .catch(console.error);
 
-    let hasJoined = false;
-
-    // Eventos del chat (igual que antes)
-    const handleConnect = () => {
-      console.log('[FRONT] Socket conectado, uniéndose a reunión si no lo ha hecho');
-      if (!hasJoined) {
-        newSocket.emit('join-meeting', { meetingId, userId: user.id, name: user.name });
-        hasJoined = true;
-      }
-    };
-    newSocket.on('connect', handleConnect);
-
-    newSocket.on('receive-message', (data: { author: string; text: string; timestamp: string }) => {
-      console.log('[FRONT] Mensaje recibido:', data);
-      setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
-      if (!showChat) setHasNewMessages(true);
+    // Eventos de voz
+    voiceSocket.on('connect', () => {
+      console.log('[FRONT] Socket de voz conectado');
+      // Unirse después de que Peer.js esté listo
     });
 
-    newSocket.on('participants-list', (participantsList: { userId: string; name: string }[]) => {
-      console.log('[FRONT] Lista de participantes recibida:', participantsList);
-      setParticipants(participantsList.map(p => ({
-        id: p.userId,
-        name: p.userId === user.id ? 'Tú' : p.name,
-        isLocal: p.userId === user.id
-      })));
-    });
+    // Esperar a que Peer.js esté listo antes de unirse a la sala de voz
+    peer.on('open', (id) => {
+      console.log('[FRONT] Peer.js conectado con ID:', id);
 
-    newSocket.on('meeting-ended', (message: string) => {
-      console.log('[FRONT] Reunión terminada:', message);
-      setMeetingEnded(true);
-      alert(message);
-      setTimeout(() => navigate('/realtime'), 3000);
-    });
-
-    newSocket.on('user-joined', (data: { userId: string; name: string }) => {
-      console.log('[FRONT] Usuario unido:', data);
-      setParticipants((prev) => {
-        if (prev.some(p => p.id === data.userId) || prev.length >= 10) return prev;
-        return [...prev, { id: data.userId, name: data.name, isLocal: false }];
+      // Unirse a la sala de voz
+      voiceSocket.emit('join-voice-room', {
+        meetingId,
+        peerId: user.id,
+        userId: user.id
       });
     });
 
-    newSocket.on('user-left', (data: { userId: string }) => {
-      console.log('[FRONT] Usuario salió:', data);
-      setParticipants((prev) => prev.filter(p => p.id !== data.userId));
-    });
+    voiceSocket.on('voice-joined', (data: { peers: string[] }) => {
+      console.log('[FRONT] Unido a sala de voz, peers existentes:', data.peers);
 
-    newSocket.on('error', (msg: string) => {
-      console.error('[FRONT] Error de socket:', msg);
-      alert(`Error: ${msg}`);
-    });
-
-    // Eventos de voz (MEJORADOS)
-    newVoiceSocket.on('connect', () => {
-      console.log('[FRONT] Voice socket connected');
-      setConnectionStatus('connecting');
-    });
-
-    newVoiceSocket.on('voice-joined', (data: { peers: string[] }) => {
-      console.log('[FRONT] Voice joined, peers:', data.peers);
-
-      // Conectar a peers existentes después de un delay
+      // Conectar a todos los peers existentes
       setTimeout(() => {
         data.peers.forEach(peerId => {
-          if (peerId !== user.id && peerRef.current && micOn && mediaStreamRef.current) {
-            initiateCall(peerId);
+          if (micOn && mediaStreamRef.current) {
+            startCall.current(peerId);
           }
         });
       }, 1000);
     });
 
-    newVoiceSocket.on('peer-joined', (peerId: string) => {
-      console.log('[FRONT] Nuevo peer:', peerId);
+    voiceSocket.on('peer-joined', (peerId: string) => {
+      console.log('[FRONT] Nuevo peer en la sala:', peerId);
 
-      // Esperar a que el peer esté listo
+      // Conectar al nuevo peer
       setTimeout(() => {
-        if (peerId !== user.id && peerRef.current && micOn && mediaStreamRef.current) {
-          initiateCall(peerId);
+        if (micOn && mediaStreamRef.current) {
+          startCall.current(peerId);
         }
       }, 1000);
     });
 
-    newVoiceSocket.on('peer-disconnected', (peerId: string) => {
+    voiceSocket.on('peer-disconnected', (peerId: string) => {
       console.log('[FRONT] Peer desconectado:', peerId);
-      cleanupPeerConnection(peerId);
+
+      // Limpiar llamada
+      const call = callsRef.current.get(peerId);
+      if (call) {
+        call.close();
+        callsRef.current.delete(peerId);
+      }
+
+      // Limpiar audio
+      const audio = audioElementsRef.current.get(peerId);
+      if (audio) {
+        audio.pause();
+        audio.srcObject = null;
+        audioElementsRef.current.delete(peerId);
+      }
     });
 
-    newVoiceSocket.on('voice-error', (msg: string) => {
-      console.error('[FRONT] Voice error:', msg);
+    // Manejar llamadas entrantes
+    peer.on('call', (call) => {
+      console.log('[FRONT] Llamada entrante de:', call.peer);
+
+      if (micOn && mediaStreamRef.current) {
+        call.answer(mediaStreamRef.current);
+        callsRef.current.set(call.peer, call);
+
+        call.on('stream', (remoteStream: MediaStream) => {
+          console.log('[FRONT] Stream recibido de llamada entrante:', call.peer);
+
+          let audio = audioElementsRef.current.get(call.peer);
+          if (!audio) {
+            audio = new Audio();
+            audioElementsRef.current.set(call.peer, audio);
+          }
+
+          audio.srcObject = remoteStream;
+          audio.volume = 1.0;
+
+          audio.play().catch(err => {
+            console.warn('[FRONT] Error reproduciendo audio entrante:', err);
+            audio.muted = true;
+            audio.play().catch(e => console.error('[FRONT] Falló reproducción:', e));
+          });
+        });
+
+        call.on('close', () => {
+          console.log('[FRONT] Llamada entrante cerrada:', call.peer);
+          callsRef.current.delete(call.peer);
+        });
+      } else {
+        console.log('[FRONT] Micrófono apagado, rechazando llamada de:', call.peer);
+        call.close();
+      }
     });
 
-    newVoiceSocket.on('disconnect', (reason) => {
-      console.log('[FRONT] Desconectado de voz:', reason);
-      setConnectionStatus('disconnected');
+    peer.on('error', (err) => {
+      console.error('[FRONT] Error de Peer.js:', err);
     });
 
-    // Cleanup mejorado
     return () => {
       console.log('[FRONT] Cleanup completo');
 
-      newSocket.off('connect', handleConnect);
-      newSocket.disconnect();
-      newVoiceSocket.disconnect();
+      // Limpiar todo
+      socket.disconnect();
+      voiceSocket.disconnect();
+      peer.destroy();
 
-      if (newPeer) {
-        newPeer.destroy();
-      }
+      callsRef.current.forEach(call => call.close());
+      callsRef.current.clear();
 
-      // Limpiar todas las llamadas
-      peerCallsRef.current.forEach(call => {
-        try { call.close(); } catch (e) { }
-      });
-      peerCallsRef.current.clear();
-
-      // Limpiar elementos de audio
       audioElementsRef.current.forEach(audio => {
         audio.pause();
         audio.srcObject = null;
       });
       audioElementsRef.current.clear();
 
-      // Limpiar media stream
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
         mediaStreamRef.current = null;
       }
     };
-  }, [meetingId, token, user, micOn, initiateCall, cleanupPeerConnection, navigate, showChat]);
+  }, [meetingId, token, user, navigate, micOn, showChat]);
 
-  // ==================== GESTIÓN DE MEDIA MEJORADA ====================
-
+  // ==================== GESTIÓN DE MEDIA ====================
   useEffect(() => {
     let mounted = true;
 
-    async function ensureMedia() {
+    async function initMedia() {
       try {
-        const desiredVideo = !!cameraOn;
-        const desiredAudio = !!micOn;
-        const current = mediaStreamRef.current;
-
-        // Si no necesitamos nada, limpiar
-        if (!desiredVideo && !desiredAudio) {
-          if (current) {
-            current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
-            mediaStreamRef.current = null;
-            if (localVideoRef.current) localVideoRef.current.srcObject = null;
-          }
-          return;
-        }
-
-        // Obtener constraints con mejor calidad de audio
-        const constraints: MediaStreamConstraints = {
-          video: desiredVideo,
-          audio: desiredAudio ? {
+        // Siempre obtener audio (micrófono activado por defecto)
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: cameraOn,
+          audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true
-          } : false
-        };
-
-        if (!current) {
-          const stream = await navigator.mediaDevices.getUserMedia(constraints);
-          if (!mounted) {
-            stream.getTracks().forEach(t => t.stop());
-            return;
           }
+        });
 
-          mediaStreamRef.current = stream;
-          if (localVideoRef.current && stream.getVideoTracks().length) {
-            try {
-              localVideoRef.current.srcObject = stream;
-              await localVideoRef.current.play();
-            } catch (e) { /* ignore */ }
-          }
-          return;
-        }
-
-        const hasVideo = current.getVideoTracks().length > 0;
-        const hasAudio = current.getAudioTracks().length > 0;
-
-        if (hasVideo === desiredVideo && hasAudio === desiredAudio) {
-          current.getVideoTracks().forEach(t => t.enabled = desiredVideo);
-          current.getAudioTracks().forEach(t => t.enabled = desiredAudio);
-          return;
-        }
-
-        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
         if (!mounted) {
-          newStream.getTracks().forEach(t => t.stop());
+          stream.getTracks().forEach(t => t.stop());
           return;
         }
 
-        try {
-          current.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
-        } catch (e) { /* ignore */ }
+        mediaStreamRef.current = stream;
 
-        mediaStreamRef.current = newStream;
-        if (localVideoRef.current) {
-          try {
-            localVideoRef.current.srcObject = newStream;
-            if (newStream.getVideoTracks().length) await localVideoRef.current.play();
-          } catch (e) { /* ignore */ }
+        // Configurar video local si la cámara está activada
+        if (cameraOn && localVideoRef.current && stream.getVideoTracks().length > 0) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(console.error);
         }
-      } catch (err: any) {
-        console.error('getUserMedia error', err);
+
+        console.log('[FRONT] Media stream obtenido:', {
+          audio: stream.getAudioTracks().length > 0,
+          video: stream.getVideoTracks().length > 0
+        });
+
+      } catch (err: any) { // CORREGIDO: Especificar tipo 'any'
+        console.error('[FRONT] Error al obtener medios:', err);
+
         if (err.name === 'NotAllowedError') {
-          alert('Permiso denegado. Concede permisos de micrófono/cámara.');
-          setCameraOn(false);
-          setMicOn(false);
-        } else if (err.name === 'NotFoundError') {
-          alert('Dispositivo no encontrado.');
-          setCameraOn(false);
-          setMicOn(false);
+          alert('Permiso denegado. Permite acceso al micrófono para usar la llamada de voz.');
+        }
+
+        setCameraOn(false);
+        setMicOn(false);
+      }
+    }
+
+    initMedia();
+
+    // Cuando cambia la cámara
+    if (mediaStreamRef.current) {
+      const videoTrack = mediaStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = cameraOn;
+
+        if (!cameraOn && localVideoRef.current) {
+          localVideoRef.current.srcObject = null;
+        } else if (cameraOn && localVideoRef.current && mediaStreamRef.current) {
+          localVideoRef.current.srcObject = mediaStreamRef.current;
+          localVideoRef.current.play().catch(console.error);
         }
       }
     }
 
-    ensureMedia();
+    return () => {
+      mounted = false;
+    };
+  }, [cameraOn]);
 
-    // Cuando el micrófono se activa/desactiva
-    if (micOn && mediaStreamRef.current && peerRef.current && voiceSocket && meetingId && user) {
-      const audioTrack = mediaStreamRef.current.getAudioTracks()[0];
-      if (audioTrack && audioTrack.readyState === 'live') {
-        console.log('[FRONT] Mic activado, reconectando a sala de voz');
+  // ==================== FUNCIONES DE UI ====================
+  const toggleChat = () => {
+    setShowChat(!showChat);
+    if (!showChat) setHasNewMessages(false);
+  };
 
-        // Limpiar llamadas existentes
-        peerCallsRef.current.forEach(call => {
-          try { call.close(); } catch (e) { }
-        });
-        peerCallsRef.current.clear();
+  const toggleCode = () => setShowCode(!showCode);
 
-        // Limpiar audio
-        audioElementsRef.current.forEach(audio => {
-          audio.pause();
-          audio.srcObject = null;
-        });
-        audioElementsRef.current.clear();
-
-        // Reconectar
-        voiceSocket.emit('join-voice-room', {
-          meetingId,
-          peerId: user.id,
-          userId: user.id
-        });
-      } else {
-        console.warn('[FRONT] Mic activado pero sin track de audio válido');
-      }
-    } else if (!micOn) {
-      console.log('[FRONT] Mic desactivado, cerrando llamadas');
-      peerCallsRef.current.forEach(call => {
-        try { call.close(); } catch (e) { }
-      });
-      peerCallsRef.current.clear();
-    }
-
-    return () => { mounted = false; };
-  }, [cameraOn, micOn, voiceSocket, meetingId, user]);
-
-  // ==================== FUNCIONES RESTANTES (sin cambios) ====================
-
-  function toggleChat() {
-    setShowChat((s) => !s);
-    if (!showChat) {
-      setHasNewMessages(false);
-    }
-  }
-
-  function toggleCode() {
-    setShowCode((s) => !s);
-  }
-
-  function copyCode() {
+  const copyCode = () => {
     if (meetingId) {
-      navigator.clipboard.writeText(meetingId).then(() => {
-        alert('Código copiado al portapapeles');
-      }).catch(err => {
-        console.error('Error copiando código:', err);
-        alert('Error copiando código');
-      });
+      navigator.clipboard.writeText(meetingId)
+        .then(() => alert('Código copiado al portapapeles'))
+        .catch((err: Error) => console.error('Error copiando código:', err)); // CORREGIDO: Especificar tipo
     }
-  }
+  };
 
-  function sendMessage(e?: React.FormEvent) {
+  const sendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const text = chatInput.trim();
-    if (!text || !socket || meetingEnded) return;
-    const authorName = user?.name || 'Tú';
-    socket.emit('send-message', { meetingId, message: text, author: authorName });
-    setMessages((m) => [...m, { id: m.length + 1, author: 'Tú', text }]);
-    setChatInput('');
-  }
+    if (!text || !socketRef.current || meetingEnded) return;
 
-  async function hangup() {
+    socketRef.current.emit('send-message', {
+      meetingId,
+      message: text,
+      author: user?.name || 'Tú'
+    });
+
+    setMessages(prev => [...prev, {
+      id: prev.length + 1,
+      author: 'Tú',
+      text
+    }]);
+    setChatInput('');
+  };
+
+  const hangup = async () => {
+    // Finalizar reunión si es creador
     if (isCreator && meetingId && token) {
       try {
         await fetch(`${CHAT_BACKEND_URL}/api/meetings/${meetingId}/end`, {
           method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}` },
         });
-        socket?.emit('end-meeting', meetingId);
-        console.log('Reunión finalizada por el creador');
+        socketRef.current?.emit('end-meeting', meetingId);
       } catch (error) {
         console.error('Error finalizando reunión:', error);
       }
     }
 
-    if (user && voiceSocket) {
-      voiceSocket.emit('leave-voice-room', { meetingId, peerId: user.id });
+    // Salir de la sala de voz
+    if (user) {
+      voiceSocketRef.current?.emit('leave-voice-room', {
+        meetingId,
+        peerId: user.id
+      });
     }
 
-    setParticipants([]);
-    setShowChat(false);
     navigate('/realtime');
-  }
+  };
 
   if (meetingEnded) {
     return (
@@ -602,19 +458,12 @@ export default function VideoCall() {
 
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">
-      {/* Indicador de estado de conexión - AÑADIDO */}
-      <div className={`vc-connection-status ${connectionStatus}`}>
-        {connectionStatus === 'connecting' && 'Conectando...'}
-        {connectionStatus === 'connected' && '✓ Conectado'}
-        {connectionStatus === 'disconnected' && '⚠ Reconectando...'}
-      </div>
-
-      <div className="vc-top-left-back" onClick={() => window.history.back()} aria-hidden>
+      <div className="vc-top-left-back" onClick={() => navigate('/realtime')} aria-hidden>
         ←
       </div>
 
       <section className={`vc-grid ${participants.length === 1 ? 'single' : ''}`} aria-live="polite">
-        {participants.map((p: any) => ( // TypeScript: usar 'any' temporalmente o definir interfaz
+        {participants.map((p) => (
           <div key={p.id} className="vc-tile" role="group" aria-label={p.name}>
             <div className="vc-card">
               {p.isLocal ? (
@@ -628,28 +477,18 @@ export default function VideoCall() {
                   />
                 ) : (
                   <div className="vc-avatar">
-                    {p.name.split(' ').map((n: string) => n[0]).join('')}
+                    {p.name.split(' ').map(n => n[0]).join('')}
                   </div>
                 )
               ) : (
                 <div className="vc-avatar">
-                  {p.name.split(' ').map((n: string) => n[0]).join('')}
-                  {/* Indicador de audio activo - AÑADIDO */}
-                  {connectionStatus === 'connected' && (
-                    <span className="vc-audio-indicator">🔊</span>
-                  )}
+                  {p.name.split(' ').map(n => n[0]).join('')}
+                  {/* Indicador de audio activo */}
+                  <span className="vc-audio-indicator">🔊</span>
                 </div>
               )}
             </div>
-            <div className="vc-name">
-              {p.name}
-              {/* Badge de estado - AÑADIDO */}
-              {p.isLocal && connectionStatus !== 'connected' && (
-                <span className="vc-connection-badge">
-                  {connectionStatus === 'connecting' ? '🔄' : '🔌'}
-                </span>
-              )}
-            </div>
+            <div className="vc-name">{p.name}</div>
           </div>
         ))}
       </section>
@@ -658,22 +497,15 @@ export default function VideoCall() {
         <button
           className={`vc-control ${cameraOn ? 'on' : 'vc-control-muted'}`}
           title={cameraOn ? 'Apagar cámara' : 'Encender cámara'}
-          aria-pressed={cameraOn}
-          onClick={() => setCameraOn((s) => !s)}
-          disabled={connectionStatus === 'disconnected'}
+          onClick={() => setCameraOn(!cameraOn)}
         >
           {cameraOn ? '📷' : '🚫'}
         </button>
 
         <button
-          className={`vc-control ${micOn ? 'on' : 'vc-control-muted'} ${connectionStatus === 'disconnected' ? 'disabled' : ''}`}
+          className={`vc-control ${micOn ? 'on' : 'vc-control-muted'}`}
           title={micOn ? 'Silenciar micrófono' : 'Activar micrófono'}
-          aria-pressed={micOn}
-          onClick={() => {
-            if (connectionStatus !== 'disconnected') {
-              setMicOn((s) => !s);
-            }
-          }}
+          onClick={() => setMicOn(!micOn)}
         >
           {micOn ? '🎙️' : '🔇'}
         </button>
@@ -681,7 +513,6 @@ export default function VideoCall() {
         <button
           className={`vc-control vc-control-chat ${showChat ? 'active' : ''}`}
           title="Chat"
-          aria-pressed={showChat}
           onClick={toggleChat}
         >
           💬
@@ -691,7 +522,6 @@ export default function VideoCall() {
         <button
           className={`vc-control vc-control-code ${showCode ? 'active' : ''}`}
           title="Código de reunión"
-          aria-pressed={showCode}
           onClick={toggleCode}
         >
           🔗
@@ -700,35 +530,15 @@ export default function VideoCall() {
         <button className="vc-control vc-control-hangup" title="Colgar" onClick={hangup}>
           📞
         </button>
-
-        {/* Botón de reconexión - AÑADIDO */}
-        {connectionStatus === 'disconnected' && (
-          <button
-            className="vc-control vc-control-refresh"
-            title="Reconectar"
-            onClick={() => {
-              if (voiceSocket && peerRef.current) {
-                voiceSocket.connect();
-                if (peerRef.current.disconnected) {
-                  peerRef.current.reconnect();
-                }
-              }
-            }}
-          >
-            🔄
-          </button>
-        )}
       </div>
 
-      {/* Code modal */}
+      {/* Modal de código */}
       {showCode && (
-        <div className="vc-modal-overlay" onClick={() => setShowCode(false)}>
+        <div className="vc-modal-overlay" onClick={toggleCode}>
           <div className="vc-modal-content" onClick={(e) => e.stopPropagation()}>
             <header className="vc-modal-header">
               <strong>Código de reunión</strong>
-              <button className="vc-modal-close" onClick={() => setShowCode(false)} aria-label="Cerrar">
-                ×
-              </button>
+              <button className="vc-modal-close" onClick={toggleCode} aria-label="Cerrar">×</button>
             </header>
             <div className="vc-modal-body">
               <p>Comparte este código para que otros se unan:</p>
@@ -736,27 +546,18 @@ export default function VideoCall() {
                 <input type="text" value={meetingId || ''} readOnly onClick={(e) => e.currentTarget.select()} />
                 <button onClick={copyCode}>Copiar</button>
               </div>
-              {/* Información de conexión - AÑADIDO */}
-              <div className="vc-connection-info">
-                <p><strong>Estado:</strong> {connectionStatus}</p>
-                <p><strong>Peers conectados:</strong> {peerCallsRef.current.size}</p>
-              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Chat panel */}
-      {showChat && (
-        <div className="vc-chat-overlay" onClick={() => setShowChat(false)} />
-      )}
+      {/* Panel de chat */}
+      {showChat && <div className="vc-chat-overlay" onClick={toggleChat} />}
 
-      <aside className={`vc-chat-panel ${showChat ? 'open' : ''}`} aria-hidden={!showChat} role="dialog" aria-label="Chat de la reunión">
+      <aside className={`vc-chat-panel ${showChat ? 'open' : ''}`} aria-hidden={!showChat}>
         <header className="vc-chat-header">
           <strong>Chat de la reunión</strong>
-          <button className="vc-chat-close" onClick={() => setShowChat(false)} aria-label="Cerrar chat">
-            ×
-          </button>
+          <button className="vc-chat-close" onClick={toggleChat} aria-label="Cerrar chat">×</button>
         </header>
 
         <div className="vc-chat-messages">
@@ -773,14 +574,8 @@ export default function VideoCall() {
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             placeholder="Escribe un mensaje..."
-            disabled={connectionStatus === 'disconnected' || !socket?.connected}
           />
-          <button
-            type="submit"
-            disabled={!chatInput.trim() || connectionStatus === 'disconnected' || !socket?.connected}
-          >
-            Enviar
-          </button>
+          <button type="submit" disabled={!chatInput.trim()}>Enviar</button>
         </form>
       </aside>
     </main>
