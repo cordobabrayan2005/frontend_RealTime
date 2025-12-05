@@ -1022,3 +1022,101 @@ select:-webkit-autofill {
   font-size: 16px;  // Más grande: de 12px a 16px
   font-weight: bold;
 }
+
+/* Indicador de estado de conexión ----- */ 
+.vc-connection-status {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vc-connection-status.connecting {
+  background: rgba(255, 152, 0, 0.9);
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+.vc-connection-status.connected {
+  background: rgba(76, 175, 80, 0.9);
+  color: white;
+}
+
+.vc-connection-status.disconnected {
+  background: rgba(244, 67, 54, 0.9);
+  color: white;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Badge de conexión en nombre */
+.vc-connection-badge {
+  margin-left: 5px;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+/* Indicador de audio en avatar */
+.vc-audio-indicator {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+/* Botón de reconexión */
+.vc-control-refresh {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+}
+
+.vc-control-refresh:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+/* Información de conexión en modal */
+.vc-connection-info {
+  margin-top: 15px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.vc-connection-info p {
+  margin: 5px 0;
+}
+
+/* Botones deshabilitados */
+.vc-control.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .vc-connection-status {
+    top: 5px;
+    right: 5px;
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+}
