@@ -64,7 +64,7 @@ export default function VideoCall() {
   const CHAT_BACKEND_URL = import.meta.env.VITE_CHAT_BACKEND_URL || 'https://realtimechatbackend-87nm.onrender.com';
   const VOICE_BACKEND_URL = import.meta.env.VITE_VOICE_BACKEND_URL || 'https://realtimevoicebackend.onrender.com';
   const PEERJS_HOST = import.meta.env.VITE_PEERJS_HOST || 'realtimevoicebackend.onrender.com';
-  const PEERJS_PATH = import.meta.env.VITE_PEERJS_PATH || '/peerjs';
+  const PEERJS_PATH = '/';
 
   // ==================== PEDIR PERMISOS DE MICRÓFONO INMEDIATAMENTE ====================
   useEffect(() => {
