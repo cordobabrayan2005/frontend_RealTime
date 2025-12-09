@@ -103,8 +103,16 @@ export default function VideoCall() {
       } catch (err: any) {
         console.error('[FRONT] ❌ Error al obtener permiso de micrófono:', err);
 
+        // Nuevo: Manejo específico para dispositivo no encontrado
+        if (err.name === 'NotFoundError') {
+          alert('No se encontró un dispositivo de micrófono. Verifica que tu dispositivo tenga audio habilitado y recarga la página.');
+          console.warn('[FRONT] Micrófono no disponible - deteniendo intentos');
+          setMicOn(false);
+          return; // No intentar reconectar
+        }
+
         if (err.name === 'NotAllowedError') {
-          alert('Para usar la llamada de voz, necesitas permitir el acceso al micrófono. Por favor:\n\n1. Haz clic en el ícono de candado en la barra de direcciones\n2. Busca "Micrófono"\n3. Selecciona "Permitir"\n4. Recarga la página');
+          alert('Permiso denegado para micrófono. Haz clic en el ícono de candado y permite el acceso.');
         }
 
         setMicOn(false);
@@ -281,7 +289,7 @@ export default function VideoCall() {
         console.log('[FRONT] 🔄 Error WebSocket detectado. Intentando solución...');
         setPeerStatus('error');
 
-        // Esperar 10 segundos antes de reconectar
+        // Esperar 5 segundos antes de reconectar
         setTimeout(() => {
           if (newPeer && !newPeer.destroyed) {
             console.log('[FRONT] Reconectando Peer.js...');
@@ -307,7 +315,7 @@ export default function VideoCall() {
               setPeer(newPeerInstance);
             }
           }
-        }, 10000);
+        }, 5000); // Reducido de 10s
       }
     });
 
