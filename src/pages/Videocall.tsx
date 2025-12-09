@@ -495,50 +495,38 @@ export default function VideoCall() {
   }, [meetingId, token, user?.id]);
 
   // Función para iniciar llamadas
-  const initiateCall = (peerId: string) => {
-    if (!peer || !mediaStreamRef.current || peerId === user?.id) {
-      console.log('[FRONT] No se puede llamar a:', peerId, ' (peer null o sin stream)');
+  const initiateCall = async (peerId: string) => {
+    let retries = 0;
+
+    while ((!peer || !mediaStreamRef.current) && retries < 10) {
+      await new Promise(res => setTimeout(res, 300));
+      retries++;
+    }
+
+    if (!peer || !mediaStreamRef.current) {
+      console.warn('[FRONT] No ready for call after retries:', peerId);
       return;
     }
 
-    // Nuevo: Verificar tracks activos (como en proyectos funcionales)
     const audioTracks = mediaStreamRef.current.getAudioTracks();
     if (!audioTracks.length || !audioTracks[0].enabled) {
       console.warn('[FRONT] No active audio tracks for calling peer:', peerId);
       return;
     }
 
-    console.log('[FRONT] Calling peer:', peerId);
+    console.log('[FRONT] ✅ Iniciando llamada segura a:', peerId);
 
-    try {
-      const call = peer.call(peerId, mediaStreamRef.current);
+    const call = peer.call(peerId, mediaStreamRef.current);
 
-      call.on('stream', (remoteStream) => {
-        console.log('[FRONT] Stream received from:', peerId);
-        const audio = new Audio();
-        audio.srcObject = remoteStream;
-        audio.play().catch(err => {
-          console.error('[FRONT] Error playing audio:', err);
-          audio.muted = true;
-          audio.play();
-        });
-      });
+    call.on('stream', (remoteStream) => {
+      const audio = new Audio();
+      audio.srcObject = remoteStream;
+      audio.play().catch(() => { });
+    });
 
-      call.on('close', () => {
-        console.log('[FRONT] Call closed with:', peerId);
-        peerCallsRef.current.delete(peerId);
-      });
-
-      call.on('error', (err) => {
-        console.error('[FRONT] Call error with:', peerId, err);
-        peerCallsRef.current.delete(peerId);
-      });
-
-      peerCallsRef.current.set(peerId, call);
-    } catch (error) {
-      console.error('[FRONT] Error initiating call:', error);
-    }
+    peerCallsRef.current.set(peerId, call);
   };
+
 
   /**
    * Toggle the chat panel visibility.
