@@ -72,9 +72,9 @@ export default function VideoCall() {
     async function requestMicrophonePermission() {
       try {
         console.log('[FRONT] Solicitando permiso de micrófono...');
-        
+
         // Solo pedir audio, no video (para no asustar al usuario)
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -82,31 +82,35 @@ export default function VideoCall() {
           },
           video: false // No pedir cámara inicialmente
         });
-        
+
         console.log('[FRONT] ✅ Permiso de micrófono concedido');
-        
-        // Guardar el stream temporalmente
+
+        // Cambiar: Mantener stream activo (para evitar pérdidas)
         mediaStreamRef.current = stream;
-        
-        // Detener los tracks temporalmente (los usaremos después)
-        stream.getTracks().forEach(track => {
-          track.stop();
+
+        // Agregar: Verificación de autoplay para reproducción (clave en proyectos funcionales)
+        const testAudio = new Audio();
+        testAudio.volume = 0; // Silenciar para test
+        testAudio.play().then(() => {
+          console.log('[FRONT] ✅ Autoplay permitido');
+        }).catch(() => {
+          console.warn('[FRONT] ⚠️ Autoplay bloqueado; requerirá interacción del usuario');
         });
-        
+
         // El micrófono está activado por defecto
         setMicOn(true);
-        
+
       } catch (err: any) {
         console.error('[FRONT] ❌ Error al obtener permiso de micrófono:', err);
-        
+
         if (err.name === 'NotAllowedError') {
           alert('Para usar la llamada de voz, necesitas permitir el acceso al micrófono. Por favor:\n\n1. Haz clic en el ícono de candado en la barra de direcciones\n2. Busca "Micrófono"\n3. Selecciona "Permitir"\n4. Recarga la página');
         }
-        
+
         setMicOn(false);
       }
     }
-    
+
     // Solo pedir permisos si tenemos meetingId
     if (meetingId) {
       requestMicrophonePermission();
@@ -271,23 +275,23 @@ export default function VideoCall() {
 
     newPeer.on('error', (err) => {
       console.error('[FRONT] ❌ Error de Peer.js:', err.type, err.message);
-      
+
       // Si es error de WebSocket (código 1006)
       if (err.type === 'network' || err.type === 'disconnected' || err.message.includes('1006') || err.message.includes('Lost connection')) {
         console.log('[FRONT] 🔄 Error WebSocket detectado. Intentando solución...');
         setPeerStatus('error');
-        
+
         // Esperar 10 segundos antes de reconectar
         setTimeout(() => {
           if (newPeer && !newPeer.destroyed) {
             console.log('[FRONT] Reconectando Peer.js...');
             setPeerStatus('connecting');
-            
+
             try {
               newPeer.reconnect();
             } catch (reconnectErr) {
               console.error('[FRONT] Error al reconectar:', reconnectErr);
-              
+
               // Si falla, crear un nuevo Peer
               const newPeerInstance = new Peer(`${user.id}_${Date.now()}`, {
                 host: PEERJS_HOST,
@@ -299,7 +303,7 @@ export default function VideoCall() {
                   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
                 }
               });
-              
+
               setPeer(newPeerInstance);
             }
           }
@@ -354,31 +358,39 @@ export default function VideoCall() {
         return;
       }
       console.log('[FRONT] Incoming call from:', call.peer);
-      
+
       if (micOn && mediaStreamRef.current) {
         console.log('[FRONT] Answering call with stream');
         call.answer(mediaStreamRef.current);
-        
+
         call.on('stream', (remoteStream) => {
           console.log('[FRONT] Received remote stream from:', call.peer);
           const audio = new Audio();
           audio.srcObject = remoteStream;
-          audio.play().catch(err => {
-            console.error('[FRONT] Error playing remote audio:', err);
-            // Intentar con muted
-            audio.muted = true;
-            audio.play();
+
+          // Nuevo: Manejo de autoplay (como en proyectos funcionales)
+          audio.play().then(() => {
+            console.log('[FRONT] ✅ Audio reproduciendo correctamente');
+          }).catch(err => {
+            console.error('[FRONT] ❌ Error de autoplay:', err);
+            alert('Haz clic en la página para habilitar audio.');
+            // Listener temporal para interacción
+            const enable = () => {
+              audio.play().catch(e => console.error('Aún fallando:', e));
+              document.removeEventListener('click', enable);
+            };
+            document.addEventListener('click', enable, { once: true });
           });
         });
-        
+
         call.on('close', () => {
           console.log('[FRONT] Call closed');
         });
-        
+
         call.on('error', (err) => {
           console.error('[FRONT] Call error:', err);
         });
-        
+
         peerCallsRef.current.set(call.peer, call);
       } else {
         console.log('[FRONT] Rejecting call - mic off or no stream');
@@ -402,12 +414,19 @@ export default function VideoCall() {
       console.log('[FRONT] No se puede llamar a:', peerId);
       return;
     }
-    
+
+    // Nuevo: Verificar tracks activos (como en proyectos funcionales)
+    const audioTracks = mediaStreamRef.current.getAudioTracks();
+    if (!audioTracks.length || !audioTracks[0].enabled) {
+      console.warn('[FRONT] No active audio tracks for calling peer:', peerId);
+      return;
+    }
+
     console.log('[FRONT] Calling peer:', peerId);
-    
+
     try {
       const call = peerInstance.call(peerId, mediaStreamRef.current);
-      
+
       call.on('stream', (remoteStream) => {
         console.log('[FRONT] Stream received from:', peerId);
         const audio = new Audio();
@@ -418,17 +437,17 @@ export default function VideoCall() {
           audio.play();
         });
       });
-      
+
       call.on('close', () => {
         console.log('[FRONT] Call closed with:', peerId);
         peerCallsRef.current.delete(peerId);
       });
-      
+
       call.on('error', (err) => {
         console.error('[FRONT] Call error with:', peerId, err);
         peerCallsRef.current.delete(peerId);
       });
-      
+
       peerCallsRef.current.set(peerId, call);
     } catch (error) {
       console.error('[FRONT] Error initiating call:', error);
