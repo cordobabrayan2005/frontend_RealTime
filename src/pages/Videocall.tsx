@@ -137,21 +137,6 @@ export default function VideoCall() {
       peerPath: PEERJS_PATH
     });
 
-    // Nuevo: Verificar estado de reunión antes de unirse
-    fetch(`${CHAT_BACKEND_URL}/api/meetings/${meetingId}`, {
-      headers: { 'Authorization': `Bearer ${token}` },
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.meeting && data.meeting.status === 'ended') {
-          alert('La reunión ya ha terminado.');
-          navigate('/realtime');
-          return;
-        }
-        // Proceder con la conexión
-      })
-      .catch(err => console.error('[FRONT] Error verificando reunión:', err));
-
     // 1. Socket de chat
     const newSocket = io(CHAT_BACKEND_URL, {
       auth: { token },
@@ -381,22 +366,39 @@ export default function VideoCall() {
 
     newPeer.on('error', (err) => {
       console.error('[FRONT] ❌ Error de Peer.js:', err.type, err.message);
-      // Mantener manejo de reconexión, pero reducir intentos
-      if (err.type === 'network' || err.type === 'disconnected') {
+
+      // Si es error de WebSocket (código 1006)
+      if (err.type === 'network' || err.type === 'disconnected' || err.message.includes('1006') || err.message.includes('Lost connection')) {
+        console.log('[FRONT] 🔄 Error WebSocket detectado. Intentando solución...');
         setPeerStatus('error');
+
+        // Esperar 5 segundos antes de reconectar
         setTimeout(() => {
           if (newPeer && !newPeer.destroyed) {
-            const newPeerInstance = new Peer(`${user.id}_${Date.now()}`, {
-              host: PEERJS_HOST,
-              path: PEERJS_PATH,
-              secure: true,
-              port: 443,
-              debug: 0,
-              config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-            });
-            setPeer(newPeerInstance);
+            console.log('[FRONT] Reconectando Peer.js...');
+            setPeerStatus('connecting');
+
+            try {
+              newPeer.reconnect();
+            } catch (reconnectErr) {
+              console.error('[FRONT] Error al reconectar:', reconnectErr);
+
+              // Si falla, crear un nuevo Peer
+              const newPeerInstance = new Peer(`${user.id}_${Date.now()}`, {
+                host: PEERJS_HOST,
+                path: PEERJS_PATH,
+                secure: true,
+                port: 443,
+                debug: 0,
+                config: {
+                  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                }
+              });
+
+              setPeer(newPeerInstance);
+            }
           }
-        }, 5000);
+        }, 5000); // Reducido de 10s
       }
     });
 
@@ -435,6 +437,53 @@ export default function VideoCall() {
       alert(`Voice error: ${msg}`);
     });
 
+    // Peer.js call handling
+    newPeer.on('call', (call) => {
+      if (!call.peer) {
+        console.warn('[FRONT] Incoming call has no peer ID, ignoring');
+        return;
+      }
+      console.log('[FRONT] Incoming call from:', call.peer);
+
+      if (micOn && mediaStreamRef.current) {
+        console.log('[FRONT] Answering call with stream');
+        call.answer(mediaStreamRef.current);
+
+        call.on('stream', (remoteStream) => {
+          console.log('[FRONT] Received remote stream from:', call.peer);
+          const audio = new Audio();
+          audio.srcObject = remoteStream;
+
+          // Nuevo: Manejo de autoplay (como en proyectos funcionales)
+          audio.play().then(() => {
+            console.log('[FRONT] ✅ Audio reproduciendo correctamente');
+          }).catch(err => {
+            console.error('[FRONT] ❌ Error de autoplay:', err);
+            alert('Haz clic en la página para habilitar audio.');
+            // Listener temporal para interacción
+            const enable = () => {
+              audio.play().catch(e => console.error('Aún fallando:', e));
+              document.removeEventListener('click', enable);
+            };
+            document.addEventListener('click', enable, { once: true });
+          });
+        });
+
+        call.on('close', () => {
+          console.log('[FRONT] Call closed');
+        });
+
+        call.on('error', (err) => {
+          console.error('[FRONT] Call error:', err);
+        });
+
+        peerCallsRef.current.set(call.peer, call);
+      } else {
+        console.log('[FRONT] Rejecting call - mic off or no stream');
+        call.close();
+      }
+    });
+
     return () => {
       console.log('[FRONT] Cleanup: desconectando socket y el peer');
       clearTimeout(connectionTimeout);
@@ -445,13 +494,14 @@ export default function VideoCall() {
     };
   }, [meetingId, token, user?.id]);
 
-  // Función para iniciar llamadas (modificada para RTCPeerConnection)
+  // Función para iniciar llamadas
   const initiateCall = (peerId: string) => {
-    if (!mediaStreamRef.current || peerId === user?.id) {
-      console.log('[FRONT] No se puede llamar a:', peerId);
+    if (!peer || !mediaStreamRef.current || peerId === user?.id) {
+      console.log('[FRONT] No se puede llamar a:', peerId, ' (peer null o sin stream)');
       return;
     }
 
+    // Nuevo: Verificar tracks activos (como en proyectos funcionales)
     const audioTracks = mediaStreamRef.current.getAudioTracks();
     if (!audioTracks.length || !audioTracks[0].enabled) {
       console.warn('[FRONT] No active audio tracks for calling peer:', peerId);
@@ -461,40 +511,30 @@ export default function VideoCall() {
     console.log('[FRONT] Calling peer:', peerId);
 
     try {
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-      });
+      const call = peer.call(peerId, mediaStreamRef.current);
 
-      // Corregido: Usar addTrack en lugar de addStream
-      mediaStreamRef.current.getTracks().forEach(track => pc.addTrack(track, mediaStreamRef.current!));
-
-      pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
-        if (event.candidate) {
-          voiceSocket?.emit('ice-candidate', { targetSocketId: peerId, candidate: event.candidate });
-        }
-      };
-
-      // Corregido: Usar ontrack en lugar de onaddstream
-      pc.ontrack = (event: RTCTrackEvent) => {
+      call.on('stream', (remoteStream) => {
         console.log('[FRONT] Stream received from:', peerId);
         const audio = new Audio();
-        audio.srcObject = event.streams[0];
+        audio.srcObject = remoteStream;
         audio.play().catch(err => {
           console.error('[FRONT] Error playing audio:', err);
           audio.muted = true;
           audio.play();
         });
-      };
-
-      pc.createOffer().then((offer) => {
-        pc.setLocalDescription(offer);
-        voiceSocket?.emit('webrtc-offer', { targetSocketId: peerId, offer });
       });
 
-      peerCallsRef.current.set(peerId, pc);
+      call.on('close', () => {
+        console.log('[FRONT] Call closed with:', peerId);
+        peerCallsRef.current.delete(peerId);
+      });
+
+      call.on('error', (err) => {
+        console.error('[FRONT] Call error with:', peerId, err);
+        peerCallsRef.current.delete(peerId);
+      });
+
+      peerCallsRef.current.set(peerId, call);
     } catch (error) {
       console.error('[FRONT] Error initiating call:', error);
     }
@@ -646,11 +686,10 @@ export default function VideoCall() {
         // Re-emit join para reconectar
         voiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
       } else {
-        console.log('[FRONT] Mic desactivado, pero manteniendo conexión a sala');
-        // No desconectar de la sala, solo cerrar llamadas activas
+        console.log('[FRONT] Mic desactivado, cerrando llamadas');
+        // Cerrar todas las llamadas
         peerCallsRef.current.forEach(call => call.close());
         peerCallsRef.current.clear();
-        // No emitir leave-voice-room aquí
       }
     }
 
