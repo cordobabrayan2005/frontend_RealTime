@@ -137,6 +137,21 @@ export default function VideoCall() {
       peerPath: PEERJS_PATH
     });
 
+    // Nuevo: Verificar estado de reunión antes de unirse
+    fetch(`${CHAT_BACKEND_URL}/api/meetings/${meetingId}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.meeting && data.meeting.status === 'ended') {
+          alert('La reunión ya ha terminado.');
+          navigate('/realtime');
+          return;
+        }
+        // Proceder con la conexión
+      })
+      .catch(err => console.error('[FRONT] Error verificando reunión:', err));
+
     // 1. Socket de chat
     const newSocket = io(CHAT_BACKEND_URL, {
       auth: { token },
@@ -631,10 +646,11 @@ export default function VideoCall() {
         // Re-emit join para reconectar
         voiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
       } else {
-        console.log('[FRONT] Mic desactivado, cerrando llamadas');
-        // Cerrar todas las llamadas
+        console.log('[FRONT] Mic desactivado, pero manteniendo conexión a sala');
+        // No desconectar de la sala, solo cerrar llamadas activas
         peerCallsRef.current.forEach(call => call.close());
         peerCallsRef.current.clear();
+        // No emitir leave-voice-room aquí
       }
     }
 
