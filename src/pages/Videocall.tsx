@@ -128,7 +128,7 @@ export default function VideoCall() {
   // Connect to Socket.IO and get a meeting when mounting
   useEffect(() => {
     if (!meetingId || !token || !user) return;
-    
+
     console.log('[FRONT] Inicializando videollamada para reunión:', meetingId);
     console.log('[FRONT] Configuración:', {
       chatBackend: CHAT_BACKEND_URL,
@@ -155,11 +155,20 @@ export default function VideoCall() {
     });
     setVoiceSocket(newVoiceSocket);
 
+    // Nuevo: Fetch ICE servers del backend
+    fetch(`${VOICE_BACKEND_URL}/ice-servers`)
+      .then(res => res.json())
+      .then(data => {
+        console.log('[FRONT] ICE servers:', data.iceServers);
+        // Usa data.iceServers en RTCPeerConnection si es necesario
+      })
+      .catch(err => console.error('[FRONT] Error fetching ICE servers:', err));
+
     let connectionTimeout: NodeJS.Timeout;
 
     // 3. Peer.js - CONFIGURACIÓN CORREGIDA PARA RENDER
     console.log('[FRONT] Inicializando Peer.js para servidor en Render...');
-    
+
     // CONFIGURACIÓN CORRECTA PARA RENDER:
     const newPeer = new Peer(user.id, {
       host: PEERJS_HOST,
@@ -174,7 +183,7 @@ export default function VideoCall() {
         ]
       }
     });
-    
+
     setPeer(newPeer);
     setPeerStatus('connecting');
 
@@ -183,7 +192,7 @@ export default function VideoCall() {
       if (newPeer && !newPeer.disconnected) {
         console.log('[FRONT] ⏱️ Timeout de conexión Peer.js (20s)');
         setPeerStatus('error');
-        
+
         // Intentar crear un nuevo Peer con ID diferente
         const newPeerWithTimeout = new Peer(`${user.id}_${Date.now()}`, {
           host: PEERJS_HOST,
@@ -195,7 +204,7 @@ export default function VideoCall() {
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
           }
         });
-        
+
         setPeer(newPeerWithTimeout);
       }
     }, 20000);
@@ -269,12 +278,86 @@ export default function VideoCall() {
       console.log('[FRONT] Voice socket connected');
     });
 
-    // Peer.js events
+    // Nuevo: Eventos de señalización WebRTC vía Socket.io (como en VCweb)
+    newVoiceSocket.on('webrtc-offer', (data: { senderSocketId: string; offer: RTCSessionDescriptionInit }) => {
+      console.log('[FRONT] Received offer from:', data.senderSocketId);
+      if (micOn && mediaStreamRef.current) {
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        });
+        // Corregido: Usar addTrack en lugar de addStream
+        mediaStreamRef.current.getTracks().forEach(track => pc.addTrack(track, mediaStreamRef.current!));
+        pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
+          if (event.candidate) {
+            newVoiceSocket.emit('ice-candidate', { targetSocketId: data.senderSocketId, candidate: event.candidate });
+          }
+        };
+        // Corregido: Usar ontrack en lugar de onaddstream
+        pc.ontrack = (event: RTCTrackEvent) => {
+          console.log('[FRONT] Stream received from:', data.senderSocketId);
+          const audio = new Audio();
+          audio.srcObject = event.streams[0];
+          audio.play().catch(err => {
+            console.error('[FRONT] Error playing audio:', err);
+            audio.muted = true;
+            audio.play();
+          });
+        };
+        pc.setRemoteDescription(data.offer).then(() => {
+          pc.createAnswer().then((answer) => {
+            pc.setLocalDescription(answer);
+            newVoiceSocket.emit('webrtc-answer', { targetSocketId: data.senderSocketId, answer });
+          });
+        });
+        peerCallsRef.current.set(data.senderSocketId, pc);
+      }
+    });
+
+    newVoiceSocket.on('webrtc-answer', (data: { senderSocketId: string; answer: RTCSessionDescriptionInit }) => {
+      console.log('[FRONT] Received answer from:', data.senderSocketId);
+      const pc = peerCallsRef.current.get(data.senderSocketId);
+      if (pc) {
+        pc.setRemoteDescription(data.answer);
+      }
+    });
+
+    newVoiceSocket.on('ice-candidate', (data: { senderSocketId: string; candidate: RTCIceCandidateInit }) => {
+      console.log('[FRONT] Received ICE candidate from:', data.senderSocketId);
+      const pc = peerCallsRef.current.get(data.senderSocketId);
+      if (pc) {
+        pc.addIceCandidate(data.candidate);
+      }
+    });
+
+    newVoiceSocket.on('media-state-changed', (data: { socketId: string; isAudioEnabled: boolean; isVideoEnabled: boolean }) => {
+      console.log('[FRONT] Media state changed for:', data.socketId);
+      // Actualizar UI si es necesario (e.g., mostrar iconos de mute)
+    });
+
+    newVoiceSocket.on('room-participants', (data: { participants: any[] }) => {
+      console.log('[FRONT] Room participants:', data.participants);
+      // Actualizar lista de participantes
+    });
+
+    newVoiceSocket.on('participant-joined', (data: { socketId: string; odiserId: string; displayName: string }) => {
+      console.log('[FRONT] Participant joined:', data);
+      // Agregar a lista
+    });
+
+    newVoiceSocket.on('participant-left', (data: { socketId: string; odiserId: string }) => {
+      console.log('[FRONT] Participant left:', data);
+      // Remover de lista
+    });
+
+    // Peer.js events (simplificado, solo para brokering)
     newPeer.on('open', (id) => {
       clearTimeout(connectionTimeout);
       console.log('[FRONT] ✅ Peer.js conectado con ID:', id);
       setPeerStatus('connected');
-      
+
       // Esperar 1 segundo antes de unirse a la sala
       setTimeout(() => {
         newVoiceSocket.emit('join-voice-room', { meetingId, peerId: user.id, userId: user.id });
@@ -283,52 +366,32 @@ export default function VideoCall() {
 
     newPeer.on('error', (err) => {
       console.error('[FRONT] ❌ Error de Peer.js:', err.type, err.message);
-
-      // Si es error de WebSocket (código 1006)
-      if (err.type === 'network' || err.type === 'disconnected' || err.message.includes('1006') || err.message.includes('Lost connection')) {
-        console.log('[FRONT] 🔄 Error WebSocket detectado. Intentando solución...');
+      // Mantener manejo de reconexión, pero reducir intentos
+      if (err.type === 'network' || err.type === 'disconnected') {
         setPeerStatus('error');
-
-        // Esperar 5 segundos antes de reconectar
         setTimeout(() => {
           if (newPeer && !newPeer.destroyed) {
-            console.log('[FRONT] Reconectando Peer.js...');
-            setPeerStatus('connecting');
-
-            try {
-              newPeer.reconnect();
-            } catch (reconnectErr) {
-              console.error('[FRONT] Error al reconectar:', reconnectErr);
-
-              // Si falla, crear un nuevo Peer
-              const newPeerInstance = new Peer(`${user.id}_${Date.now()}`, {
-                host: PEERJS_HOST,
-                path: PEERJS_PATH,
-                secure: true,
-                port: 443,
-                debug: 0,
-                config: {
-                  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                }
-              });
-
-              setPeer(newPeerInstance);
-            }
+            const newPeerInstance = new Peer(`${user.id}_${Date.now()}`, {
+              host: PEERJS_HOST,
+              path: PEERJS_PATH,
+              secure: true,
+              port: 443,
+              debug: 0,
+              config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+            });
+            setPeer(newPeerInstance);
           }
-        }, 5000); // Reducido de 10s
+        }, 5000);
       }
     });
 
-    // Voice socket events para señalización
+    // Voice socket events para señalización (mantener)
     newVoiceSocket.on('voice-joined', (data: { peers: string[] }) => {
       console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
-      
-      // Esperar un momento antes de conectar
       setTimeout(() => {
-        // Connect to existing peers (si tenemos mic activado y stream)
         data.peers.forEach(peerId => {
-          if (newPeer && micOn && mediaStreamRef.current) {
-            initiateCall(newPeer, peerId);
+          if (micOn && mediaStreamRef.current) {
+            initiateCall(peerId);
           }
         });
       }, 1500);
@@ -336,20 +399,18 @@ export default function VideoCall() {
 
     newVoiceSocket.on('peer-joined', (peerId: string) => {
       console.log('[FRONT] Peer joined voice:', peerId);
-      
-      // Esperar antes de conectar
       setTimeout(() => {
-        if (newPeer && micOn && mediaStreamRef.current) {
-          initiateCall(newPeer, peerId);
+        if (micOn && mediaStreamRef.current) {
+          initiateCall(peerId);
         }
       }, 1500);
     });
 
     newVoiceSocket.on('peer-disconnected', (peerId: string) => {
       console.log('[FRONT] Peer disconnected:', peerId);
-      const call = peerCallsRef.current.get(peerId);
-      if (call) {
-        call.close();
+      const pc = peerCallsRef.current.get(peerId);
+      if (pc) {
+        pc.close();
         peerCallsRef.current.delete(peerId);
       }
     });
@@ -357,53 +418,6 @@ export default function VideoCall() {
     newVoiceSocket.on('voice-error', (msg: string) => {
       console.error('[FRONT] Voice error:', msg);
       alert(`Voice error: ${msg}`);
-    });
-
-    // Peer.js call handling
-    newPeer.on('call', (call) => {
-      if (!call.peer) {
-        console.warn('[FRONT] Incoming call has no peer ID, ignoring');
-        return;
-      }
-      console.log('[FRONT] Incoming call from:', call.peer);
-
-      if (micOn && mediaStreamRef.current) {
-        console.log('[FRONT] Answering call with stream');
-        call.answer(mediaStreamRef.current);
-
-        call.on('stream', (remoteStream) => {
-          console.log('[FRONT] Received remote stream from:', call.peer);
-          const audio = new Audio();
-          audio.srcObject = remoteStream;
-
-          // Nuevo: Manejo de autoplay (como en proyectos funcionales)
-          audio.play().then(() => {
-            console.log('[FRONT] ✅ Audio reproduciendo correctamente');
-          }).catch(err => {
-            console.error('[FRONT] ❌ Error de autoplay:', err);
-            alert('Haz clic en la página para habilitar audio.');
-            // Listener temporal para interacción
-            const enable = () => {
-              audio.play().catch(e => console.error('Aún fallando:', e));
-              document.removeEventListener('click', enable);
-            };
-            document.addEventListener('click', enable, { once: true });
-          });
-        });
-
-        call.on('close', () => {
-          console.log('[FRONT] Call closed');
-        });
-
-        call.on('error', (err) => {
-          console.error('[FRONT] Call error:', err);
-        });
-
-        peerCallsRef.current.set(call.peer, call);
-      } else {
-        console.log('[FRONT] Rejecting call - mic off or no stream');
-        call.close();
-      }
     });
 
     return () => {
@@ -416,14 +430,13 @@ export default function VideoCall() {
     };
   }, [meetingId, token, user?.id]);
 
-  // Función para iniciar llamadas
-  const initiateCall = (peerInstance: Peer, peerId: string) => {
+  // Función para iniciar llamadas (modificada para RTCPeerConnection)
+  const initiateCall = (peerId: string) => {
     if (!mediaStreamRef.current || peerId === user?.id) {
       console.log('[FRONT] No se puede llamar a:', peerId);
       return;
     }
 
-    // Nuevo: Verificar tracks activos (como en proyectos funcionales)
     const audioTracks = mediaStreamRef.current.getAudioTracks();
     if (!audioTracks.length || !audioTracks[0].enabled) {
       console.warn('[FRONT] No active audio tracks for calling peer:', peerId);
@@ -433,30 +446,40 @@ export default function VideoCall() {
     console.log('[FRONT] Calling peer:', peerId);
 
     try {
-      const call = peerInstance.call(peerId, mediaStreamRef.current);
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      });
 
-      call.on('stream', (remoteStream) => {
+      // Corregido: Usar addTrack en lugar de addStream
+      mediaStreamRef.current.getTracks().forEach(track => pc.addTrack(track, mediaStreamRef.current!));
+
+      pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
+        if (event.candidate) {
+          voiceSocket?.emit('ice-candidate', { targetSocketId: peerId, candidate: event.candidate });
+        }
+      };
+
+      // Corregido: Usar ontrack en lugar de onaddstream
+      pc.ontrack = (event: RTCTrackEvent) => {
         console.log('[FRONT] Stream received from:', peerId);
         const audio = new Audio();
-        audio.srcObject = remoteStream;
+        audio.srcObject = event.streams[0];
         audio.play().catch(err => {
           console.error('[FRONT] Error playing audio:', err);
           audio.muted = true;
           audio.play();
         });
+      };
+
+      pc.createOffer().then((offer) => {
+        pc.setLocalDescription(offer);
+        voiceSocket?.emit('webrtc-offer', { targetSocketId: peerId, offer });
       });
 
-      call.on('close', () => {
-        console.log('[FRONT] Call closed with:', peerId);
-        peerCallsRef.current.delete(peerId);
-      });
-
-      call.on('error', (err) => {
-        console.error('[FRONT] Call error with:', peerId, err);
-        peerCallsRef.current.delete(peerId);
-      });
-
-      peerCallsRef.current.set(peerId, call);
+      peerCallsRef.current.set(peerId, pc);
     } catch (error) {
       console.error('[FRONT] Error initiating call:', error);
     }
@@ -529,25 +552,25 @@ export default function VideoCall() {
         // Si el micrófono está activado pero no tenemos stream, pedirlo
         if (desiredAudio && !current) {
           console.log('[FRONT] Obteniendo stream de audio...');
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: desiredVideo, 
-            audio: desiredAudio 
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: desiredVideo,
+            audio: desiredAudio
           });
-          
-          if (!mounted) { 
-            stream.getTracks().forEach(t => t.stop()); 
-            return; 
+
+          if (!mounted) {
+            stream.getTracks().forEach(t => t.stop());
+            return;
           }
-          
+
           mediaStreamRef.current = stream;
-          
+
           if (desiredVideo && localVideoRef.current && stream.getVideoTracks().length) {
-            try { 
-              localVideoRef.current.srcObject = stream; 
-              await localVideoRef.current.play(); 
+            try {
+              localVideoRef.current.srcObject = stream;
+              await localVideoRef.current.play();
             } catch (e) { /* ignore */ }
           }
-          
+
           return;
         }
 
@@ -555,31 +578,31 @@ export default function VideoCall() {
         if (current) {
           const videoTrack = current.getVideoTracks()[0];
           const audioTrack = current.getAudioTracks()[0];
-          
+
           if (videoTrack) {
             videoTrack.enabled = desiredVideo;
           }
-          
+
           if (audioTrack) {
             audioTrack.enabled = desiredAudio;
           }
-          
+
           // Si necesitamos video pero no tenemos track de video
           if (desiredVideo && !videoTrack) {
-            const newStream = await navigator.mediaDevices.getUserMedia({ 
-              video: true, 
-              audio: desiredAudio 
+            const newStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: desiredAudio
             });
-            
-            if (!mounted) { 
-              newStream.getTracks().forEach(t => t.stop()); 
-              return; 
+
+            if (!mounted) {
+              newStream.getTracks().forEach(t => t.stop());
+              return;
             }
-            
+
             // Detener stream anterior y reemplazar
             current.getTracks().forEach(t => t.stop());
             mediaStreamRef.current = newStream;
-            
+
             if (localVideoRef.current) {
               localVideoRef.current.srcObject = newStream;
               localVideoRef.current.play().catch(console.error);
@@ -589,11 +612,11 @@ export default function VideoCall() {
 
       } catch (err: any) {
         console.error('[FRONT] Error en getUserMedia:', err);
-        
+
         if (err.name === 'NotAllowedError') {
           alert('Permiso denegado para micrófono/cámara. Para usar la llamada de voz:\n\n1. Haz clic en el ícono de candado 🔒\n2. Busca "Micrófono" o "Cámara"\n3. Selecciona "Permitir"\n4. Recarga la página');
         }
-        
+
         setCameraOn(false);
         setMicOn(false);
       }
