@@ -38,12 +38,12 @@ export function useSockets(meetingId: string | undefined) {
     setVoiceSocket(newVoiceSocket);
 
     // Obtener ICE servers del backend
-    fetch(`${VOICE_BACKEND_URL}/ice-servers`)
-      .then(res => res.json())
-      .then(data => {
-        console.log('[FRONT] ICE servers:', data.iceServers);
-      })
-      .catch(err => console.error('[FRONT] Error fetching ICE servers:', err));
+    // fetch(`${VOICE_BACKEND_URL}/ice-servers`)
+    //   .then(res => res.json())
+    //   .then(data => {
+    //     console.log('[FRONT] ICE servers:', data.iceServers);
+    //   })
+    //   .catch(err => console.error('[FRONT] Error fetching ICE servers:', err));
 
     // Verificar si es el creador
     fetch(`${CHAT_BACKEND_URL}/api/meetings/${meetingId}`, {

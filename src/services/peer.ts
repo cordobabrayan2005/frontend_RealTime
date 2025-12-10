@@ -118,8 +118,10 @@ export function usePeer(
 
         call.on('stream', (remoteStream) => {
           console.log('[FRONT] Received remote stream from:', call.peer);
-          const audio = new Audio();
+          const audio = document.createElement('audio');
           audio.srcObject = remoteStream;
+          audio.autoplay = true;
+          audio.setAttribute('playsinline', 'true');
 
           audio.play().then(() => {
             console.log('[FRONT] ✅ Audio reproduciendo correctamente');
@@ -167,14 +169,14 @@ export function usePeer(
       retries++;
     }
 
-    if (!peer || !mediaStreamRef.current) {
+    if (!peer || !mediaStreamRef.current || !peer.open) {
       console.warn('[FRONT] No ready for call after retries:', peerId);
       return;
     }
 
     const audioTracks = mediaStreamRef.current.getAudioTracks();
     if (!audioTracks.length || !audioTracks[0].enabled) {
-      console.warn('[FRONT] No active audio tracks for calling peer:', peerId);
+      console.warn('[FRONT] Micrófono desactivado, no se llama a:', peerId);
       return;
     }
 
