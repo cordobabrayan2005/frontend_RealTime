@@ -8,7 +8,7 @@ export function setupWebRTCHandlers(
   peerCallsRef: React.MutableRefObject<Map<string, any>>,
   mediaStreamRef: React.RefObject<MediaStream | null>
 ) {
-  if (!voiceSocket) return () => {};
+  if (!voiceSocket) return () => { };
 
   const handleWebRTCOffer = (data: { senderSocketId: string; offer: RTCSessionDescriptionInit }) => {
     console.log('[FRONT] Received offer from:', data.senderSocketId);
@@ -19,33 +19,41 @@ export function setupWebRTCHandlers(
           { urls: 'stun:stun1.l.google.com:19302' }
         ]
       });
-      
+
       mediaStreamRef.current.getTracks().forEach(track => pc.addTrack(track, mediaStreamRef.current!));
-      
+
       pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
         if (event.candidate) {
           voiceSocket.emit('ice-candidate', { targetSocketId: data.senderSocketId, candidate: event.candidate });
         }
       };
-      
+
       pc.ontrack = (event: RTCTrackEvent) => {
         console.log('[FRONT] Stream received from:', data.senderSocketId);
-        const audio = new Audio();
+        const audio = document.createElement('audio');
         audio.srcObject = event.streams[0];
+        audio.autoplay = true;
+        audio.setAttribute('playsinline', 'true');
+        audio.muted = false;
+
         audio.play().catch(err => {
-          console.error('[FRONT] Error playing audio:', err);
-          audio.muted = true;
-          audio.play();
+          console.warn('[FRONT] Autoplay bloqueado, esperando interacción...');
+          const resume = () => {
+            audio.play().catch(e => console.error('Aún fallando:', e));
+            document.removeEventListener('click', resume);
+          };
+          document.addEventListener('click', resume, { once: true });
         });
+
       };
-      
+
       pc.setRemoteDescription(data.offer).then(() => {
         pc.createAnswer().then((answer) => {
           pc.setLocalDescription(answer);
           voiceSocket.emit('webrtc-answer', { targetSocketId: data.senderSocketId, answer });
         });
       });
-      
+
       peerCallsRef.current?.set(data.senderSocketId, pc);
     }
   };

@@ -183,10 +183,33 @@ export function usePeer(
     const call = peer.call(peerId, mediaStreamRef.current);
 
     call.on('stream', (remoteStream) => {
-      const audio = new Audio();
+      console.log('[FRONT] Received remote stream from:', call.peer);
+
+      const audio = document.createElement('audio');
       audio.srcObject = remoteStream;
-      audio.play().catch(() => { });
+      audio.autoplay = true;
+      audio.setAttribute('playsinline', 'true');
+      audio.muted = false;
+
+      const tryPlay = async () => {
+        try {
+          await audio.play();
+          console.log('[FRONT] ✅ Audio reproduciendo correctamente');
+        } catch (err) {
+          console.warn('[FRONT] ⚠️ Autoplay bloqueado, esperando interacción del usuario…');
+
+          const resume = () => {
+            audio.play().catch(e => console.error('[FRONT] 🔇 Sigue bloqueado:', e));
+            document.removeEventListener('click', resume);
+          };
+
+          document.addEventListener('click', resume, { once: true });
+        }
+      };
+
+      setTimeout(tryPlay, 300);
     });
+
 
     peerCallsRef.current.set(peerId, call);
   };
