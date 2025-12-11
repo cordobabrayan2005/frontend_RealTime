@@ -36,7 +36,6 @@ export default function VideoCall() {
 
   const {
     peer,
-    peerStatus,
     peerCallsRef,
     initiateCall
   } = usePeer(meetingId, voiceSocket, mediaStreamRef);
@@ -48,6 +47,10 @@ export default function VideoCall() {
   const [chatInput, setChatInput] = useState('');
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
+
+  // 🔔 Modal no bloqueante
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
 
   // ==================== SOCKET HANDLERS ====================
   useEffect(() => {
@@ -78,11 +81,60 @@ export default function VideoCall() {
       })));
     };
 
+    const cleanupMedia = () => {
+      console.log('[FRONT] Limpieza forzada de medios');
+      peerCallsRef.current?.forEach((call) => {
+        try {
+          call.close();
+        } catch { }
+      });
+      peerCallsRef.current?.clear();
+
+      // FORZAR apagado del micrófono
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => {
+          try {
+            track.enabled = false;
+            track.stop();
+          } catch { }
+        });
+
+        mediaStreamRef.current = null;
+      }
+
+      // Destruir peer completo
+      try {
+        peer?.destroy();
+      } catch { }
+
+      // Forzar desconexión del socket de voz
+      try {
+        voiceSocket?.disconnect();
+      } catch { }
+    };
+
+    const handleForceDisconnect = () => {
+      console.log('[FRONT] Forzado a desconectar por el servidor');
+      cleanupMedia();
+
+      if (voiceSocket) {
+        voiceSocket.removeAllListeners();
+        voiceSocket.close();
+      }
+
+      setMeetingEnded(true);
+      setModalMessage('Has sido desconectado por el anfitrión.');
+      setModalVisible(true);
+      setTimeout(() => navigate('/realtime'), 1500);
+    };
+
     const handleMeetingEnded = (message: string) => {
       console.log('[FRONT] Reunión terminada:', message);
+      cleanupMedia();
       setMeetingEnded(true);
-      alert(message);
-      setTimeout(() => navigate('/realtime'), 3000);
+      setModalMessage(message);
+      setModalVisible(true);
+      setTimeout(() => navigate('/realtime'), 2000);
     };
 
     const handleUserJoined = (data: { userId: string; name: string }) => {
@@ -100,7 +152,8 @@ export default function VideoCall() {
 
     const handleSocketError = (msg: string) => {
       console.error('[FRONT] Error de socket:', msg);
-      alert(`Error: ${msg}`);
+      setModalMessage(`Error: ${msg}`);
+      setModalVisible(true);
     };
 
     const handleVoiceJoined = (data: { peers: string[] }) => {
@@ -124,7 +177,6 @@ export default function VideoCall() {
     };
 
     const handlePeerDisconnected = (peerId: string) => {
-      console.log('[FRONT] Peer disconnected:', peerId);
       const pc = peerCallsRef.current.get(peerId);
       if (pc) {
         pc.close();
@@ -134,23 +186,8 @@ export default function VideoCall() {
 
     const handleVoiceError = (msg: string) => {
       console.error('[FRONT] Voice error:', msg);
-      alert(`Voice error: ${msg}`);
-    };
-
-    const handleMediaStateChanged = (data: { socketId: string; isAudioEnabled: boolean; isVideoEnabled: boolean }) => {
-      console.log('[FRONT] Media state changed for:', data.socketId);
-    };
-
-    const handleRoomParticipants = (data: { participants: any[] }) => {
-      console.log('[FRONT] Room participants:', data.participants);
-    };
-
-    const handleParticipantJoined = (data: { socketId: string; odiserId: string; displayName: string }) => {
-      console.log('[FRONT] Participant joined:', data);
-    };
-
-    const handleParticipantLeft = (data: { socketId: string; odiserId: string }) => {
-      console.log('[FRONT] Participant left:', data);
+      setModalMessage(`Voice error: ${msg}`);
+      setModalVisible(true);
     };
 
     socket.on('connect', handleConnect);
@@ -166,37 +203,16 @@ export default function VideoCall() {
     voiceSocket.on('peer-joined', handlePeerJoined);
     voiceSocket.on('peer-disconnected', handlePeerDisconnected);
     voiceSocket.on('voice-error', handleVoiceError);
-    voiceSocket.on('media-state-changed', handleMediaStateChanged);
-    voiceSocket.on('room-participants', handleRoomParticipants);
-    voiceSocket.on('participant-joined', handleParticipantJoined);
-    voiceSocket.on('participant-left', handleParticipantLeft);
+    voiceSocket.on('force-disconnect', handleForceDisconnect);
 
     const cleanupWebRTC = setupWebRTCHandlers(voiceSocket, peerCallsRef, mediaStreamRef);
 
     return () => {
-      socket.off('connect', handleConnect);
-      socket.off('receive-message', handleReceiveMessage);
-      socket.off('participants-list', handleParticipantsList);
-      socket.off('meeting-ended', handleMeetingEnded);
-      socket.off('user-joined', handleUserJoined);
-      socket.off('user-left', handleUserLeft);
-      socket.off('error', handleSocketError);
-
-      voiceSocket.off('connect');
-      voiceSocket.off('voice-joined', handleVoiceJoined);
-      voiceSocket.off('peer-joined', handlePeerJoined);
-      voiceSocket.off('peer-disconnected', handlePeerDisconnected);
-      voiceSocket.off('voice-error', handleVoiceError);
-      voiceSocket.off('media-state-changed', handleMediaStateChanged);
-      voiceSocket.off('room-participants', handleRoomParticipants);
-      voiceSocket.off('participant-joined', handleParticipantJoined);
-      voiceSocket.off('participant-left', handleParticipantLeft);
-
       cleanupWebRTC();
     };
   }, [socket, voiceSocket, user, meetingId, micOn, mediaStreamRef, initiateCall, navigate, showChat]);
 
-  // ==================== FUNCIONES DE UI ====================
+  // ==================== UI ====================
   const toggleChat = () => {
     setShowChat((s) => !s);
     if (!showChat) setHasNewMessages(false);
@@ -208,12 +224,15 @@ export default function VideoCall() {
 
   const copyCode = () => {
     if (meetingId) {
-      navigator.clipboard.writeText(meetingId).then(() => {
-        alert('Código copiado al portapapeles');
-      }).catch(err => {
-        console.error('Error copiando código:', err);
-        alert('Error copiando código');
-      });
+      navigator.clipboard.writeText(meetingId)
+        .then(() => {
+          setModalMessage('Código copiado al portapapeles');
+          setModalVisible(true);
+        })
+        .catch(() => {
+          setModalMessage('Error copiando código');
+          setModalVisible(true);
+        });
     }
   };
 
@@ -236,7 +255,6 @@ export default function VideoCall() {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         socket?.emit('end-meeting', meetingId);
-        console.log('Reunión finalizada por el creador');
       } catch (error) {
         console.error('Error finalizando reunión:', error);
       }
@@ -253,7 +271,7 @@ export default function VideoCall() {
 
   if (meetingEnded) {
     return (
-      <main className="videocall-page" role="main" aria-label="Videollamada">
+      <main className="videocall-page">
         <div className="vc-ended-message">
           <h2>La reunión ha terminado</h2>
           <p>Serás redirigido en unos segundos...</p>
@@ -264,6 +282,14 @@ export default function VideoCall() {
 
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">
+      {modalVisible && (
+        <div className="vc-modal-overlay">
+          <div className="vc-modal-content">
+            <h3>{modalMessage}</h3>
+          </div>
+        </div>
+      )}
+
       <div className="vc-top-left-back" onClick={() => window.history.back()} aria-hidden>
         ←
       </div>
@@ -276,10 +302,14 @@ export default function VideoCall() {
                 cameraOn ? (
                   <video ref={localVideoRef} className="vc-local-video" muted playsInline />
                 ) : (
-                  <div className="vc-avatar">{p.name.split(' ').map(n => n[0]).join('')}</div>
+                  <div className="vc-avatar">
+                    {p.name.split(' ').map(n => n[0]).join('')}
+                  </div>
                 )
               ) : (
-                <div className="vc-avatar">{p.name.split(' ').map(n => n[0]).join('')}</div>
+                <div className="vc-avatar">
+                  {p.name.split(' ').map(n => n[0]).join('')}
+                </div>
               )}
             </div>
             <div className="vc-name">{p.name}</div>
@@ -305,6 +335,7 @@ export default function VideoCall() {
         >
           {micOn ? '🎙️' : '🔇'}
         </button>
+
         <button
           className={`vc-control vc-control-chat ${showChat ? 'active' : ''}`}
           title="Chat"
@@ -312,8 +343,11 @@ export default function VideoCall() {
           onClick={toggleChat}
         >
           💬
-          {hasNewMessages && !showChat && <span className="vc-chat-notification">●</span>}
+          {hasNewMessages && !showChat && (
+            <span className="vc-chat-notification">●</span>
+          )}
         </button>
+
         <button
           className={`vc-control vc-control-code ${showCode ? 'active' : ''}`}
           title="Código de reunión"
@@ -322,16 +356,33 @@ export default function VideoCall() {
         >
           🔗
         </button>
-        <button className="vc-control vc-control-hangup" title="Colgar" onClick={hangup}>📞</button>
+
+        <button
+          className="vc-control vc-control-hangup"
+          title="Colgar"
+          onClick={hangup}
+        >
+          📞
+        </button>
       </div>
 
       {showCode && (
         <div className="vc-modal-overlay" onClick={() => setShowCode(false)}>
-          <div className="vc-modal-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="vc-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <header className="vc-modal-header">
               <strong>Código de reunión</strong>
-              <button className="vc-modal-close" onClick={() => setShowCode(false)} aria-label="Cerrar">×</button>
+              <button
+                className="vc-modal-close"
+                onClick={() => setShowCode(false)}
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
             </header>
+
             <div className="vc-modal-body">
               <p>Comparte este código para que otros se unan:</p>
               <div className="vc-code-display">
@@ -344,18 +395,35 @@ export default function VideoCall() {
       )}
 
       {showChat && (
-        <div className="vc-chat-overlay" onClick={() => setShowChat(false)} />
+        <div
+          className="vc-chat-overlay"
+          onClick={() => setShowChat(false)}
+        />
       )}
 
-      <aside className={`vc-chat-panel ${showChat ? 'open' : ''}`} aria-hidden={!showChat} role="dialog" aria-label="Chat de la reunión">
+      <aside
+        className={`vc-chat-panel ${showChat ? 'open' : ''}`}
+        aria-hidden={!showChat}
+        role="dialog"
+        aria-label="Chat de la reunión"
+      >
         <header className="vc-chat-header">
           <strong>Chat de la reunión</strong>
-          <button className="vc-chat-close" onClick={() => setShowChat(false)} aria-label="Cerrar chat">×</button>
+          <button
+            className="vc-chat-close"
+            onClick={() => setShowChat(false)}
+            aria-label="Cerrar chat"
+          >
+            ×
+          </button>
         </header>
 
         <div className="vc-chat-messages">
           {messages.map((m) => (
-            <div key={m.id} className={`vc-chat-message ${m.author === 'Tú' ? 'me' : ''}`}>
+            <div
+              key={m.id}
+              className={`vc-chat-message ${m.author === 'Tú' ? 'me' : ''}`}
+            >
               <div className="vc-chat-author">{m.author}</div>
               <div className="vc-chat-text">{m.text}</div>
             </div>
@@ -363,10 +431,15 @@ export default function VideoCall() {
         </div>
 
         <form className="vc-chat-input" onSubmit={sendMessage}>
-          <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Escribe un mensaje..." />
+          <input
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            placeholder="Escribe un mensaje..."
+          />
           <button type="submit">Enviar</button>
         </form>
       </aside>
     </main>
   );
+
 }
