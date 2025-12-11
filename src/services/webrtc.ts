@@ -6,13 +6,13 @@ import { Socket } from 'socket.io-client';
 export function setupWebRTCHandlers(
   voiceSocket: Socket | null,
   peerCallsRef: React.MutableRefObject<Map<string, any>>,
-  mediaStreamRef: React.RefObject<MediaStream | null>
+  audioStreamRef: React.RefObject<MediaStream | null>  // Corregido: Usar audioStreamRef
 ) {
   if (!voiceSocket) return () => { };
 
   const handleWebRTCOffer = (data: { senderSocketId: string; offer: RTCSessionDescriptionInit }) => {
     console.log('[FRONT] Received offer from:', data.senderSocketId);
-    if (mediaStreamRef.current) {
+    if (audioStreamRef.current) {  // Corregido: Usar audioStreamRef
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -20,7 +20,7 @@ export function setupWebRTCHandlers(
         ]
       });
 
-      mediaStreamRef.current.getTracks().forEach(track => pc.addTrack(track, mediaStreamRef.current!));
+      audioStreamRef.current.getTracks().forEach(track => pc.addTrack(track, audioStreamRef.current!));  // Corregido
 
       pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
         if (event.candidate) {

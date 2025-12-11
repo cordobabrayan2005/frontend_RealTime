@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'; 
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useMedia } from '../services/media';
@@ -20,8 +20,9 @@ export default function VideoCall() {
   const remoteVideoRefs = useRef(new Map<string, MediaStream>());
 
   const {
+    audioStreamRef,  // Nuevo: Usar audioStreamRef para voz
+    videoStreamRef,  // Nuevo: Usar videoStreamRef para video
     localVideoRef,
-    mediaStreamRef,
     cameraOn,
     setCameraOn,
     micOn,
@@ -41,7 +42,7 @@ export default function VideoCall() {
     peerVideo,
     peerCallsRef,
     initiateCall
-  } = usePeer(meetingId, voiceSocket, videoSocket, mediaStreamRef, cameraOn, micOn, remoteVideoRefs);
+  } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
 
   const [showCode, setShowCode] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -54,7 +55,7 @@ export default function VideoCall() {
   // 🔔 Modal no bloqueante
   const [modalVisible, setModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
-  
+
 
   // ==================== SOCKET HANDLERS ====================
   useEffect(() => {
@@ -94,24 +95,33 @@ export default function VideoCall() {
       });
       peerCallsRef.current?.clear();
       // FORZAR apagado del micrófono y cámara
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((track) => {
+      if (audioStreamRef.current) {  // Corregido: Usar audioStreamRef
+        audioStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {  // Agregado tipo
           try {
             track.enabled = false;
             track.stop();
           } catch { }
         });
-        mediaStreamRef.current = null;
+        audioStreamRef.current = null;
+      }
+      if (videoStreamRef.current) {  // Corregido: Usar videoStreamRef
+        videoStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {  // Agregado tipo
+          try {
+            track.enabled = false;
+            track.stop();
+          } catch { }
+        });
+        videoStreamRef.current = null;
       }
       // Destruir peers de voz y video
       try {
-        peerVoice?.destroy();  // Cambiado de peer
-        peerVideo?.destroy();  // Nuevo
+        peerVoice?.destroy();
+        peerVideo?.destroy();
       } catch { }
       // Forzar desconexión de sockets
       try {
         voiceSocket?.disconnect();
-        videoSocket?.disconnect();  // Nuevo
+        videoSocket?.disconnect();
       } catch { }
     };
 
@@ -123,7 +133,7 @@ export default function VideoCall() {
         voiceSocket.removeAllListeners();
         voiceSocket.close();
       }
-      if (videoSocket) {  // Nuevo
+      if (videoSocket) {
         videoSocket.removeAllListeners();
         videoSocket.close();
       }
@@ -200,13 +210,13 @@ export default function VideoCall() {
       if (cameraOn) initiateCall(peerId);
     };
 
-    const handleVideoError = (msg: string) => {  // Nuevo: Handler para errores de video
+    const handleVideoError = (msg: string) => {
       console.error('[FRONT] Video error:', msg);
       setModalMessage(`Video error: ${msg}`);
       setModalVisible(true);
     };
 
-    //eliminar listeners previos para evitar duplicados
+    // Eliminar listeners previos para evitar duplicados
     socket.removeAllListeners('connect');
     socket.removeAllListeners('receive-message');
     socket.removeAllListeners('participants-list');
@@ -222,14 +232,14 @@ export default function VideoCall() {
     voiceSocket.removeAllListeners('voice-error');
     voiceSocket.removeAllListeners('force-disconnect');
 
-    videoSocket.removeAllListeners('connect');  // Nuevo
-    videoSocket.removeAllListeners('video-joined');  // Nuevo
-    videoSocket.removeAllListeners('peer-joined');  // Nuevo
-    videoSocket.removeAllListeners('peer-disconnected');  // Nuevo
-    videoSocket.removeAllListeners('video-error');  // Nuevo
-    videoSocket.removeAllListeners('force-disconnect');  // Nuevo
+    videoSocket.removeAllListeners('connect');
+    videoSocket.removeAllListeners('video-joined');
+    videoSocket.removeAllListeners('peer-joined');
+    videoSocket.removeAllListeners('peer-disconnected');
+    videoSocket.removeAllListeners('video-error');
+    videoSocket.removeAllListeners('force-disconnect');
 
-    //registras tus handlers:
+    // Registrar handlers
     socket.on('connect', handleConnect);
     socket.on('receive-message', handleReceiveMessage);
     socket.on('participants-list', handleParticipantsList);
@@ -245,19 +255,19 @@ export default function VideoCall() {
     voiceSocket.on('voice-error', handleVoiceError);
     voiceSocket.on('force-disconnect', handleForceDisconnect);
 
-    videoSocket.on('connect', () => console.log('[FRONT] Video socket connected'));  // Nuevo
-    videoSocket.on('video-joined', handleVideoJoined);  // Nuevo
-    videoSocket.on('peer-joined', handlePeerJoinedVideo);  // Nuevo
-    videoSocket.on('peer-disconnected', handlePeerDisconnected);  // Nuevo (reutiliza el mismo)
-    videoSocket.on('video-error', handleVideoError);  // Nuevo
-    videoSocket.on('force-disconnect', handleForceDisconnect);  // Nuevo (reutiliza el mismo)
+    videoSocket.on('connect', () => console.log('[FRONT] Video socket connected'));
+    videoSocket.on('video-joined', handleVideoJoined);
+    videoSocket.on('peer-joined', handlePeerJoinedVideo);
+    videoSocket.on('peer-disconnected', handlePeerDisconnected);
+    videoSocket.on('video-error', handleVideoError);
+    videoSocket.on('force-disconnect', handleForceDisconnect);
 
-    const cleanupWebRTC = setupWebRTCHandlers(voiceSocket, peerCallsRef, mediaStreamRef);
+    const cleanupWebRTC = setupWebRTCHandlers(voiceSocket, peerCallsRef, audioStreamRef);  // Corregido: Pasar audioStreamRef
 
     return () => {
       cleanupWebRTC();
     };
-  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, mediaStreamRef, initiateCall, navigate]);
+  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate]);  // Corregido: Agregar audioStreamRef y videoStreamRef
 
   // ==================== UI ====================
   const toggleChat = () => {
@@ -275,16 +285,15 @@ export default function VideoCall() {
         .then(() => {
           setModalMessage('Código copiado al portapapeles');
           setModalVisible(true);
-          setTimeout(() => setModalVisible(false), 1500); // 👈 SE AGREGA ESTO
+          setTimeout(() => setModalVisible(false), 1500);
         })
         .catch(() => {
           setModalMessage('Error copiando código');
           setModalVisible(true);
-          setTimeout(() => setModalVisible(false), 1500); // 👈 TAMBIÉN AQUÍ
+          setTimeout(() => setModalVisible(false), 1500);
         });
     }
   };
-
 
   const sendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -313,7 +322,7 @@ export default function VideoCall() {
     if (user && voiceSocket) {
       voiceSocket.emit('leave-voice-room', { meetingId, peerId: user.id });
     }
-    if (user && videoSocket) {  // Nuevo: Desconectar video
+    if (user && videoSocket) {
       videoSocket.emit('leave-video-room', { meetingId, peerId: user.id });
     }
 
@@ -352,7 +361,12 @@ export default function VideoCall() {
               {p.isLocal ? (
                 cameraOn ? (
                   <video
-                    ref={localVideoRef}
+                    ref={(el) => {
+                      if (el && videoStreamRef.current) {  // Corregido: Usar videoStreamRef para video local
+                        el.srcObject = videoStreamRef.current;
+                        el.play().catch(console.error);
+                      }
+                    }}
                     className="vc-local-video"
                     muted
                     playsInline
@@ -363,12 +377,11 @@ export default function VideoCall() {
                   </div>
                 )
               ) : (
-                // Nuevo: Mostrar video remoto si hay stream de video para este peer
                 remoteVideoRefs.current.has(p.id) ? (
                   <video
                     ref={(el) => {
                       if (el && remoteVideoRefs.current.get(p.id)) {
-                        el.srcObject = remoteVideoRefs.current.get(p.id) || null;  // Corregido: Agregado || null
+                        el.srcObject = remoteVideoRefs.current.get(p.id) || null;
                         el.play().catch(console.error);
                       }
                     }}
@@ -511,4 +524,5 @@ export default function VideoCall() {
       </aside>
     </main>
   );
+
 }
