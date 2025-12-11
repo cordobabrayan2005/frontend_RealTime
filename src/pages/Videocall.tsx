@@ -308,7 +308,6 @@ export default function VideoCall() {
         </div>
       )}
 
-
       <div className="vc-top-left-back" onClick={() => window.history.back()} aria-hidden>
         ←
       </div>
@@ -319,14 +318,21 @@ export default function VideoCall() {
             <div className="vc-card">
               {p.isLocal ? (
                 cameraOn ? (
-                  <video ref={localVideoRef} className="vc-local-video" muted playsInline />
+                  <video
+                    ref={localVideoRef}
+                    className="vc-local-video"
+                    muted
+                    playsInline
+                  />
                 ) : (
                   <div className="vc-avatar">
-                    {p.name.split(' ').map(n => n[0]).join('')}
+                    {/* 👇 Aquí se corrige: si es local → "Tú" */}
+                    {'Tú'}
                   </div>
                 )
               ) : (
                 <div className="vc-avatar">
+                  {/* 👇 Iniciales de los demás */}
                   {p.name.split(' ').map(n => n[0]).join('')}
                 </div>
               )}
@@ -460,5 +466,4 @@ export default function VideoCall() {
       </aside>
     </main>
   );
-
 }
