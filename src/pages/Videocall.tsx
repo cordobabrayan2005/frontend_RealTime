@@ -164,22 +164,20 @@ export default function VideoCall() {
 
     const handleVoiceJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
-      setTimeout(() => {
-        data.peers.forEach(peerId => {
-          if (micOn && mediaStreamRef.current) {
-            initiateCall(peerId);
-          }
-        });
-      }, 1500);
+      // Eliminar setTimeout - conectar inmediatamente
+      data.peers.forEach(peerId => {
+        if (micOn && mediaStreamRef.current) {
+          initiateCall(peerId);
+        }
+      });
     };
 
     const handlePeerJoined = (peerId: string) => {
       console.log('[FRONT] Peer joined voice:', peerId);
-      setTimeout(() => {
-        if (micOn && mediaStreamRef.current) {
-          initiateCall(peerId);
-        }
-      }, 1500);
+      // Eliminar setTimeout
+      if (micOn && mediaStreamRef.current) {
+        initiateCall(peerId);
+      }
     };
 
     const handlePeerDisconnected = (peerId: string) => {
@@ -198,22 +196,18 @@ export default function VideoCall() {
 
     const handleVideoJoined = (data: { peers: string[] }) => {  // Nuevo: Handler para video
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
-      setTimeout(() => {
-        data.peers.forEach(peerId => {
-          if (cameraOn && mediaStreamRef.current) {
-            initiateCall(peerId);
-          }
-        });
-      }, 1500);
+      data.peers.forEach(peerId => {
+        if (cameraOn && mediaStreamRef.current) {
+          initiateCall(peerId);
+        }
+      });
     };
 
     const handlePeerJoinedVideo = (peerId: string) => {  // Nuevo: Handler para peer de video
       console.log('[FRONT] Peer joined video:', peerId);
-      setTimeout(() => {
-        if (cameraOn && mediaStreamRef.current) {
-          initiateCall(peerId);
-        }
-      }, 1500);
+      if (cameraOn && mediaStreamRef.current) {
+        initiateCall(peerId);
+      }
     };
 
     const handleVideoError = (msg: string) => {  // Nuevo: Handler para errores de video
