@@ -164,20 +164,14 @@ export default function VideoCall() {
 
     const handleVoiceJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
-      // Eliminar setTimeout - conectar inmediatamente
       data.peers.forEach(peerId => {
-        if (micOn && mediaStreamRef.current) {
-          initiateCall(peerId);
-        }
+        if (micOn) initiateCall(peerId);
       });
     };
 
     const handlePeerJoined = (peerId: string) => {
       console.log('[FRONT] Peer joined voice:', peerId);
-      // Eliminar setTimeout
-      if (micOn && mediaStreamRef.current) {
-        initiateCall(peerId);
-      }
+      if (micOn) initiateCall(peerId);
     };
 
     const handlePeerDisconnected = (peerId: string) => {
@@ -194,20 +188,16 @@ export default function VideoCall() {
       setModalVisible(true);
     };
 
-    const handleVideoJoined = (data: { peers: string[] }) => {  // Nuevo: Handler para video
+    const handleVideoJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
       data.peers.forEach(peerId => {
-        if (cameraOn && mediaStreamRef.current) {
-          initiateCall(peerId);
-        }
+        if (cameraOn) initiateCall(peerId);
       });
     };
 
-    const handlePeerJoinedVideo = (peerId: string) => {  // Nuevo: Handler para peer de video
+    const handlePeerJoinedVideo = (peerId: string) => {
       console.log('[FRONT] Peer joined video:', peerId);
-      if (cameraOn && mediaStreamRef.current) {
-        initiateCall(peerId);
-      }
+      if (cameraOn) initiateCall(peerId);
     };
 
     const handleVideoError = (msg: string) => {  // Nuevo: Handler para errores de video
