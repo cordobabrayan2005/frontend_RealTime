@@ -6,6 +6,29 @@ import { usePeer } from '../services/peer';
 import { useSockets } from '../services/sockets';
 import { setupWebRTCHandlers } from '../services/webrtc';
 
+
+interface ParticipantVideoProps {
+  participantId: string;
+  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>;
+}
+function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const stream = remoteVideoRefs.current.get(participantId);
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(console.error);
+    }
+  }, [participantId, remoteVideoRefs]);
+  return (
+    <video
+      ref={videoRef}
+      className="vc-remote-video"
+      playsInline
+    />
+  );
+}
+
 /**
  * VideoCall React component.
  * Manages local media (camera/microphone), a simulated participants list and an in-call chat UI.
@@ -342,6 +365,7 @@ export default function VideoCall() {
     );
   }
 
+
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">
       {modalVisible && (
@@ -361,12 +385,7 @@ export default function VideoCall() {
               {p.isLocal ? (
                 cameraOn ? (
                   <video
-                    ref={(el) => {
-                      if (el && videoStreamRef.current) {  // Corregido: Usar videoStreamRef para video local
-                        el.srcObject = videoStreamRef.current;
-                        el.play().catch(console.error);
-                      }
-                    }}
+                    ref={localVideoRef}  // Usar localVideoRef para video local
                     className="vc-local-video"
                     muted
                     playsInline
@@ -378,16 +397,7 @@ export default function VideoCall() {
                 )
               ) : (
                 remoteVideoRefs.current.has(p.id) ? (
-                  <video
-                    ref={(el) => {
-                      if (el && remoteVideoRefs.current.get(p.id)) {
-                        el.srcObject = remoteVideoRefs.current.get(p.id) || null;
-                        el.play().catch(console.error);
-                      }
-                    }}
-                    className="vc-remote-video"
-                    playsInline
-                  />
+                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} />
                 ) : (
                   <div className="vc-avatar">
                     {p.name.split(' ').map(n => n[0]).join('')}
@@ -524,5 +534,4 @@ export default function VideoCall() {
       </aside>
     </main>
   );
-
 }

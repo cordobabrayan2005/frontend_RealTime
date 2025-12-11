@@ -97,17 +97,18 @@ export function usePeer(
 
     newPeerVideo.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de video de:', call.peer);
-      if (videoStreamRef.current && cameraOn) {  // Corregido: Usar videoStreamRef
+      if (videoStreamRef.current && cameraOn) {
         call.answer(videoStreamRef.current);
         call.on('stream', (remoteStream) => {
           console.log('[FRONT] Stream de video recibido de:', call.peer);
+          const userId = call.peer.split('_')[0];
+          remoteVideoRefs.current.set(userId, remoteStream);
           const video = document.createElement('video');
           video.srcObject = remoteStream;
           video.autoplay = true;
           video.setAttribute('playsinline', 'true');
           video.muted = false;
           video.play().catch(err => console.error('Autoplay video:', err));
-          remoteVideoRefs.current.set(call.peer, remoteStream);
         });
       } else {
         console.log('[FRONT] Rechazando llamada de video - cámara apagada');
@@ -115,7 +116,8 @@ export function usePeer(
       }
       call.on('close', () => {
         console.log('[FRONT] Llamada de video cerrada');
-        remoteVideoRefs.current.delete(call.peer);
+        const userId = call.peer.split('_')[0];
+        remoteVideoRefs.current.delete(userId);
       });
       call.on('error', (err) => console.error('[FRONT] Error en llamada de video:', err));
       peerCallsRef.current.set(call.peer, call);
@@ -136,7 +138,7 @@ export function usePeer(
 
   // ==================== INICIAR LLAMADAS ====================
   const initiateCall = async (peerId: string) => {
-    if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {  // Corregido: Usar audioStreamRef
+    if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
       const callVoice = peerVoice.call(peerId, audioStreamRef.current);
       peerCallsRef.current.set(peerId, callVoice);
