@@ -37,9 +37,12 @@ export function useMedia() {
 
   // Manejar mute/enable de audio
   useEffect(() => {
+    console.log('[FRONT] Muting audio:', !micOn);
     if (audioStreamRef.current) {
       audioStreamRef.current.getAudioTracks().forEach(track => {
+        console.log('[FRONT] Track enabled before:', track.enabled);
         track.enabled = micOn;
+        console.log('[FRONT] Track enabled after:', track.enabled);
       });
     }
   }, [micOn]);

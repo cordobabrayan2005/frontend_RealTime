@@ -64,7 +64,8 @@ export default function VideoCall() {
     peerVoice,
     peerVideo,
     peerCallsRef,
-    initiateCall
+    initiateCall,
+    sendMuteToPeers
   } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
 
   const [showCode, setShowCode] = useState(false);
@@ -424,7 +425,13 @@ export default function VideoCall() {
           className={`vc-control ${micOn ? 'on' : 'vc-control-muted'}`}
           title={micOn ? 'Silenciar micrófono' : 'Activar micrófono'}
           aria-pressed={!micOn}
-          onClick={() => setMicOn((s) => !s)}
+          onClick={() => {
+            setMicOn((prev) => {
+              const newMicOn = !prev;
+              sendMuteToPeers(!newMicOn);
+              return newMicOn;
+            });
+          }}
         >
           {micOn ? '🎙️' : '🔇'}
         </button>
