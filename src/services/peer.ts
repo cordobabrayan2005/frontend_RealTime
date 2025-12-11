@@ -6,7 +6,8 @@ export function usePeer(
   meetingId: string | undefined,
   voiceSocket: any,
   videoSocket: any,
-  mediaStreamRef: React.RefObject<MediaStream | null>,
+  audioStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar audioStreamRef
+  videoStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar videoStreamRef
   cameraOn: boolean,
   micOn: boolean,
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>
@@ -42,8 +43,8 @@ export function usePeer(
 
     newPeerVoice.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de voz de:', call.peer);
-      if (mediaStreamRef.current && micOn) {  // Verificar micOn aquí
-        call.answer(mediaStreamRef.current);
+      if (audioStreamRef.current && micOn) {  // Corregido: Usar audioStreamRef
+        call.answer(audioStreamRef.current);
         call.on('stream', (remoteStream) => {
           console.log('[FRONT] Stream de voz recibido de:', call.peer);
           const audio = document.createElement('audio');
@@ -96,8 +97,8 @@ export function usePeer(
 
     newPeerVideo.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de video de:', call.peer);
-      if (mediaStreamRef.current && cameraOn) {  // Verificar cameraOn aquí
-        call.answer(mediaStreamRef.current);
+      if (videoStreamRef.current && cameraOn) {  // Corregido: Usar videoStreamRef
+        call.answer(videoStreamRef.current);
         call.on('stream', (remoteStream) => {
           console.log('[FRONT] Stream de video recibido de:', call.peer);
           const video = document.createElement('video');
@@ -135,16 +136,16 @@ export function usePeer(
 
   // ==================== INICIAR LLAMADAS ====================
   const initiateCall = async (peerId: string) => {
-    if (peerId.endsWith('_voice') && micOn && peerVoice && mediaStreamRef.current) {
+    if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {  // Corregido: Usar audioStreamRef
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
-      const callVoice = peerVoice.call(peerId, mediaStreamRef.current);
+      const callVoice = peerVoice.call(peerId, audioStreamRef.current);
       peerCallsRef.current.set(peerId, callVoice);
-    } else if (peerId.endsWith('_video') && cameraOn && peerVideo && mediaStreamRef.current) {
+    } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {  // Corregido: Usar videoStreamRef
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
-      const callVideo = peerVideo.call(peerId, mediaStreamRef.current);
+      const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
     } else {
-      console.log('[FRONT] No se puede iniciar llamada - media apagado o peer no disponible');
+      console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
     }
   };
 
