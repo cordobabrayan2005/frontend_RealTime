@@ -35,6 +35,15 @@ export function useMedia() {
     requestMicrophonePermission();
   }, []);
 
+  // Manejar mute/enable de audio
+  useEffect(() => {
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = micOn;
+      });
+    }
+  }, [micOn]);
+
   // Manejar stream de video por separado
   useEffect(() => {
     async function ensureVideo() {
