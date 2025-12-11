@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; 
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useMedia } from '../services/media';
@@ -17,6 +17,7 @@ export default function VideoCall() {
   const meetingId = (location.state as any)?.meetingId;
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const remoteVideoRefs = useRef(new Map<string, MediaStream>());
 
   const {
     localVideoRef,
@@ -30,15 +31,17 @@ export default function VideoCall() {
   const {
     socket,
     voiceSocket,
+    videoSocket,
     isCreator,
     CHAT_BACKEND_URL
   } = useSockets(meetingId);
 
   const {
-    peer,
+    peerVoice,
+    peerVideo,
     peerCallsRef,
     initiateCall
-  } = usePeer(meetingId, voiceSocket, mediaStreamRef);
+  } = usePeer(meetingId, voiceSocket, videoSocket, mediaStreamRef, cameraOn, micOn, remoteVideoRefs);
 
   const [showCode, setShowCode] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -51,10 +54,11 @@ export default function VideoCall() {
   // 🔔 Modal no bloqueante
   const [modalVisible, setModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  
 
   // ==================== SOCKET HANDLERS ====================
   useEffect(() => {
-    if (!socket || !voiceSocket || !user || !meetingId) return;
+    if (!socket || !voiceSocket || !videoSocket || !user || !meetingId) return;
 
     let hasJoined = false;
 
@@ -89,8 +93,7 @@ export default function VideoCall() {
         } catch { }
       });
       peerCallsRef.current?.clear();
-
-      // FORZAR apagado del micrófono
+      // FORZAR apagado del micrófono y cámara
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((track) => {
           try {
@@ -98,18 +101,17 @@ export default function VideoCall() {
             track.stop();
           } catch { }
         });
-
         mediaStreamRef.current = null;
       }
-
-      // Destruir peer completo
+      // Destruir peers de voz y video
       try {
-        peer?.destroy();
+        peerVoice?.destroy();  // Cambiado de peer
+        peerVideo?.destroy();  // Nuevo
       } catch { }
-
-      // Forzar desconexión del socket de voz
+      // Forzar desconexión de sockets
       try {
         voiceSocket?.disconnect();
+        videoSocket?.disconnect();  // Nuevo
       } catch { }
     };
 
@@ -120,6 +122,10 @@ export default function VideoCall() {
       if (voiceSocket) {
         voiceSocket.removeAllListeners();
         voiceSocket.close();
+      }
+      if (videoSocket) {  // Nuevo
+        videoSocket.removeAllListeners();
+        videoSocket.close();
       }
 
       setMeetingEnded(true);
@@ -190,6 +196,32 @@ export default function VideoCall() {
       setModalVisible(true);
     };
 
+    const handleVideoJoined = (data: { peers: string[] }) => {  // Nuevo: Handler para video
+      console.log('[FRONT] Video joined, connecting to peers:', data.peers);
+      setTimeout(() => {
+        data.peers.forEach(peerId => {
+          if (cameraOn && mediaStreamRef.current) {
+            initiateCall(peerId);
+          }
+        });
+      }, 1500);
+    };
+
+    const handlePeerJoinedVideo = (peerId: string) => {  // Nuevo: Handler para peer de video
+      console.log('[FRONT] Peer joined video:', peerId);
+      setTimeout(() => {
+        if (cameraOn && mediaStreamRef.current) {
+          initiateCall(peerId);
+        }
+      }, 1500);
+    };
+
+    const handleVideoError = (msg: string) => {  // Nuevo: Handler para errores de video
+      console.error('[FRONT] Video error:', msg);
+      setModalMessage(`Video error: ${msg}`);
+      setModalVisible(true);
+    };
+
     //eliminar listeners previos para evitar duplicados
     socket.removeAllListeners('connect');
     socket.removeAllListeners('receive-message');
@@ -205,6 +237,13 @@ export default function VideoCall() {
     voiceSocket.removeAllListeners('peer-disconnected');
     voiceSocket.removeAllListeners('voice-error');
     voiceSocket.removeAllListeners('force-disconnect');
+
+    videoSocket.removeAllListeners('connect');  // Nuevo
+    videoSocket.removeAllListeners('video-joined');  // Nuevo
+    videoSocket.removeAllListeners('peer-joined');  // Nuevo
+    videoSocket.removeAllListeners('peer-disconnected');  // Nuevo
+    videoSocket.removeAllListeners('video-error');  // Nuevo
+    videoSocket.removeAllListeners('force-disconnect');  // Nuevo
 
     //registras tus handlers:
     socket.on('connect', handleConnect);
@@ -222,12 +261,19 @@ export default function VideoCall() {
     voiceSocket.on('voice-error', handleVoiceError);
     voiceSocket.on('force-disconnect', handleForceDisconnect);
 
+    videoSocket.on('connect', () => console.log('[FRONT] Video socket connected'));  // Nuevo
+    videoSocket.on('video-joined', handleVideoJoined);  // Nuevo
+    videoSocket.on('peer-joined', handlePeerJoinedVideo);  // Nuevo
+    videoSocket.on('peer-disconnected', handlePeerDisconnected);  // Nuevo (reutiliza el mismo)
+    videoSocket.on('video-error', handleVideoError);  // Nuevo
+    videoSocket.on('force-disconnect', handleForceDisconnect);  // Nuevo (reutiliza el mismo)
+
     const cleanupWebRTC = setupWebRTCHandlers(voiceSocket, peerCallsRef, mediaStreamRef);
 
     return () => {
       cleanupWebRTC();
     };
-  }, [socket, voiceSocket, user, meetingId, micOn, mediaStreamRef, initiateCall, navigate]);
+  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, mediaStreamRef, initiateCall, navigate]);
 
   // ==================== UI ====================
   const toggleChat = () => {
@@ -283,6 +329,9 @@ export default function VideoCall() {
     if (user && voiceSocket) {
       voiceSocket.emit('leave-voice-room', { meetingId, peerId: user.id });
     }
+    if (user && videoSocket) {  // Nuevo: Desconectar video
+      videoSocket.emit('leave-video-room', { meetingId, peerId: user.id });
+    }
 
     setParticipants([]);
     setShowChat(false);
@@ -326,15 +375,27 @@ export default function VideoCall() {
                   />
                 ) : (
                   <div className="vc-avatar">
-                    {/* 👇 Aquí se corrige: si es local → "Tú" */}
                     {'Tú'}
                   </div>
                 )
               ) : (
-                <div className="vc-avatar">
-                  {/* 👇 Iniciales de los demás */}
-                  {p.name.split(' ').map(n => n[0]).join('')}
-                </div>
+                // Nuevo: Mostrar video remoto si hay stream de video para este peer
+                remoteVideoRefs.current.has(p.id) ? (
+                  <video
+                    ref={(el) => {
+                      if (el && remoteVideoRefs.current.get(p.id)) {
+                        el.srcObject = remoteVideoRefs.current.get(p.id) || null;  // Corregido: Agregado || null
+                        el.play().catch(console.error);
+                      }
+                    }}
+                    className="vc-remote-video"
+                    playsInline
+                  />
+                ) : (
+                  <div className="vc-avatar">
+                    {p.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                )
               )}
             </div>
             <div className="vc-name">{p.name}</div>

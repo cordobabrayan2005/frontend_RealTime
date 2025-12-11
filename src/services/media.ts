@@ -59,6 +59,38 @@ export function useMedia() {
     requestMicrophonePermission();
   }, []);
 
+  async function requestMediaPermission() {  // Cambiado de requestMicrophonePermission
+    try {
+      console.log('[FRONT] Solicitando permisos de audio y video...');
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: true  // Agregado para video
+      });
+
+      console.log('[FRONT] ✅ Permisos concedidos');
+      mediaStreamRef.current = stream;
+
+      // Test de audio (igual)
+      const testAudio = new Audio();
+      testAudio.volume = 0;
+      testAudio.play().then(() => console.log('[FRONT] ✅ Autoplay audio permitido')).catch(() => console.warn('[FRONT] ⚠️ Autoplay bloqueado'));
+
+      setMicOn(true);
+      setCameraOn(true);  // Nuevo
+
+    } catch (err: any) {
+      console.error('[FRONT] ❌ Error obteniendo permisos:', err);
+      // ... (manejo de errores igual, pero agregar para video)
+      setMicOn(false);
+      setCameraOn(false);
+    }
+  }
+
   /**
    * Asegurar que el stream de medios coincida con el estado deseado de cámara/micrófono
    */
