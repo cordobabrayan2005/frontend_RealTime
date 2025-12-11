@@ -23,13 +23,18 @@ export function usePeer(
   const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
   const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
+  // ==================== PEER DE VOZ (INDEPENDIENTE) ====================
   useEffect(() => {
-    if (!meetingId || !user || !voiceSocket || !videoSocket) return;
+    if (!meetingId || !user || !voiceSocket || !micOn) {
+      if (peerVoice) {
+        peerVoice.destroy();
+        setPeerVoice(null);
+      }
+      return;
+    }
 
-    console.log('[FRONT] Inicializando Peer.js para voz y video...');
-
-    // Peer para voz
-    const newPeerVoice = new Peer(`${user.id}_voice`, {  // ID único para voz
+    console.log('[FRONT] Inicializando Peer de voz...');
+    const newPeerVoice = new Peer(`${user.id}_voice`, {
       host: PEERJS_HOST_VOICE,
       path: '/',
       secure: true,
@@ -37,22 +42,7 @@ export function usePeer(
       debug: 1,
       config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
-    setPeerVoice(newPeerVoice);
 
-    // Peer para video
-    const newPeerVideo = new Peer(`${user.id}_video`, {  // ID único para video
-      host: PEERJS_HOST_VIDEO,
-      path: '/',
-      secure: true,
-      port: 443,
-      debug: 1,
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-    });
-    setPeerVideo(newPeerVideo);
-
-    setPeerStatus('connecting');
-
-    // Configurar Peer de voz
     newPeerVoice.on('open', (id) => {
       console.log('[FRONT] ✅ Peer voz conectado:', id);
       setTimeout(() => {
@@ -73,7 +63,39 @@ export function usePeer(
       }
     });
 
-    // Configurar Peer de video
+    newPeerVoice.on('error', (err) => {
+      console.error('[FRONT] Error Peer voz:', err);
+      setPeerStatus('error');
+    });
+
+    setPeerVoice(newPeerVoice);
+
+    return () => {
+      console.log('[FRONT] Cleanup: destruyendo peer voz');
+      newPeerVoice.destroy();
+    };
+  }, [meetingId, user?.id, voiceSocket, micOn]);  // Solo depende de micOn para voz
+
+  // ==================== PEER DE VIDEO (INDEPENDIENTE) ====================
+  useEffect(() => {
+    if (!meetingId || !user || !videoSocket || !cameraOn) {
+      if (peerVideo) {
+        peerVideo.destroy();
+        setPeerVideo(null);
+      }
+      return;
+    }
+
+    console.log('[FRONT] Inicializando Peer de video...');
+    const newPeerVideo = new Peer(`${user.id}_video`, {
+      host: PEERJS_HOST_VIDEO,
+      path: '/',
+      secure: true,
+      port: 443,
+      debug: 1,
+      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
+
     newPeerVideo.on('open', (id) => {
       console.log('[FRONT] ✅ Peer video conectado:', id);
       setPeerStatus('connected');
@@ -102,13 +124,11 @@ export function usePeer(
           video.muted = false;
           video.play().catch(err => console.error('Autoplay video:', err));
 
-          // Nuevo: Guarda el stream remoto en remoteVideoRefs
           remoteVideoRefs.current.set(call.peer, remoteStream);
         });
 
         call.on('close', () => {
           console.log('[FRONT] Call closed');
-          // Nuevo: Limpia el stream remoto al cerrar
           remoteVideoRefs.current.delete(call.peer);
         });
 
@@ -123,30 +143,28 @@ export function usePeer(
       }
     });
 
-    // Manejo de errores
-    [newPeerVoice, newPeerVideo].forEach(peer => {
-      peer.on('error', (err) => {
-        console.error('[FRONT] Error Peer:', err);
-        setPeerStatus('error');
-      });
+    newPeerVideo.on('error', (err) => {
+      console.error('[FRONT] Error Peer video:', err);
+      setPeerStatus('error');
     });
 
+    setPeerVideo(newPeerVideo);
+
     return () => {
-      console.log('[FRONT] Cleanup: destruyendo peers');
-      newPeerVoice.destroy();
+      console.log('[FRONT] Cleanup: destruyendo peer video');
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, voiceSocket, videoSocket, mediaStreamRef, cameraOn, micOn, remoteVideoRefs]);  // Agregado remoteVideoRefs
+  }, [meetingId, user?.id, videoSocket, cameraOn]);  // Solo depende de cameraOn para video
 
   /**
    * Iniciar llamadas para voz y video
    */
   const initiateCall = async (peerId: string) => {
-    if (micOn && peerVoice && mediaStreamRef.current) {
+    if (micOn && peerVoice && mediaStreamRef.current && peerId.endsWith('_voice')) {
       const callVoice = peerVoice.call(peerId, mediaStreamRef.current);
       peerCallsRef.current.set(peerId, callVoice);
     }
-    if (cameraOn && peerVideo && mediaStreamRef.current) {
+    if (cameraOn && peerVideo && mediaStreamRef.current && peerId.endsWith('_video')) {
       const callVideo = peerVideo.call(peerId, mediaStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
     }
