@@ -146,12 +146,12 @@ export function usePeer(
    */
   const initiateCall = async (peerId: string) => {
     if (micOn && peerVoice && mediaStreamRef.current) {
-      const callVoice = peerVoice.call(`${peerId}_voice`, mediaStreamRef.current);
-      peerCallsRef.current.set(`${peerId}_voice`, callVoice);
+      const callVoice = peerVoice.call(peerId, mediaStreamRef.current);
+      peerCallsRef.current.set(peerId, callVoice);
     }
     if (cameraOn && peerVideo && mediaStreamRef.current) {
-      const callVideo = peerVideo.call(`${peerId}_video`, mediaStreamRef.current);
-      peerCallsRef.current.set(`${peerId}_video`, callVideo);
+      const callVideo = peerVideo.call(peerId, mediaStreamRef.current);
+      peerCallsRef.current.set(peerId, callVideo);
     }
   };
 
