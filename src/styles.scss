@@ -1120,3 +1120,38 @@ select:-webkit-autofill {
     padding: 4px 8px;
   }
 }
+
+/* ===== Modal flotante de aviso (copiado / error) ===== */
+.rt-toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(40px);
+  background: #1d4ed8;
+  color: white;
+  padding: 14px 22px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease;
+  z-index: 2000;
+}
+
+/* Estado visible */
+.rt-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+/* Variantes */
+.rt-toast.success {
+  background: #16a34a;
+}
+
+.rt-toast.error {
+  background: #dc2626;
+}

@@ -228,13 +228,16 @@ export default function VideoCall() {
         .then(() => {
           setModalMessage('Código copiado al portapapeles');
           setModalVisible(true);
+          setTimeout(() => setModalVisible(false), 1500); // 👈 SE AGREGA ESTO
         })
         .catch(() => {
           setModalMessage('Error copiando código');
           setModalVisible(true);
+          setTimeout(() => setModalVisible(false), 1500); // 👈 TAMBIÉN AQUÍ
         });
     }
   };
+
 
   const sendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -283,12 +286,11 @@ export default function VideoCall() {
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">
       {modalVisible && (
-        <div className="vc-modal-overlay">
-          <div className="vc-modal-content">
-            <h3>{modalMessage}</h3>
-          </div>
+        <div className="rt-toast show">
+          {modalMessage}
         </div>
       )}
+
 
       <div className="vc-top-left-back" onClick={() => window.history.back()} aria-hidden>
         ←
