@@ -103,65 +103,46 @@ export function useMedia() {
         const desiredAudio = !!micOn;
         const current = mediaStreamRef.current;
 
-        if (desiredAudio && !current) {
-          console.log('[FRONT] Obteniendo stream de audio...');
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: desiredVideo,
-            audio: desiredAudio
-          });
-
-          if (!mounted) {
-            stream.getTracks().forEach(t => t.stop());
-            return;
-          }
-
-          mediaStreamRef.current = stream;
-
-          if (desiredVideo && localVideoRef.current && stream.getVideoTracks().length) {
-            try {
-              localVideoRef.current.srcObject = stream;
-              await localVideoRef.current.play();
-            } catch (e) { /* ignore */ }
-          }
-
-          return;
-        }
-
         if (current) {
+          // Solo ajustar tracks existentes, no recrear stream
           const videoTrack = current.getVideoTracks()[0];
           const audioTrack = current.getAudioTracks()[0];
 
           if (videoTrack) videoTrack.enabled = desiredVideo;
           if (audioTrack) audioTrack.enabled = desiredAudio;
 
+          // Si se activa video pero no hay track, obtener uno nuevo
           if (desiredVideo && !videoTrack) {
-            const newStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: desiredAudio
-            });
-
+            const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: desiredAudio });
             if (!mounted) {
               newStream.getTracks().forEach(t => t.stop());
               return;
             }
-
             current.getTracks().forEach(t => t.stop());
             mediaStreamRef.current = newStream;
-
             if (localVideoRef.current) {
               localVideoRef.current.srcObject = newStream;
               localVideoRef.current.play().catch(console.error);
             }
           }
+        } else if (desiredAudio) {
+          // Solo obtener stream si no hay ninguno y se necesita audio
+          const stream = await navigator.mediaDevices.getUserMedia({ video: desiredVideo, audio: desiredAudio });
+          if (!mounted) {
+            stream.getTracks().forEach(t => t.stop());
+            return;
+          }
+          mediaStreamRef.current = stream;
+          if (desiredVideo && localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+            localVideoRef.current.play().catch(console.error);
+          }
         }
-
       } catch (err: any) {
         console.error('[FRONT] Error en getUserMedia:', err);
-
         if (err.name === 'NotAllowedError') {
           alert('Permiso denegado para micrófono/cámara. Para usar la llamada de voz:\n\n1. Haz clic en el ícono de candado 🔒\n2. Busca "Micrófono" o "Cámara"\n3. Selecciona "Permitir"\n4. Recarga la página');
         }
-
         setCameraOn(false);
         setMicOn(false);
       }
