@@ -23,7 +23,7 @@ export function usePeer(
   //const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';   -- ajustar variables de entorno
   //const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
-  const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST || 'realtimevoicebackend.onrender.com'; //para no mover el front
+  const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
   const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
   useEffect(() => {
