@@ -190,6 +190,23 @@ export default function VideoCall() {
       setModalVisible(true);
     };
 
+    //eliminar listeners previos para evitar duplicados
+    socket.removeAllListeners('connect');
+    socket.removeAllListeners('receive-message');
+    socket.removeAllListeners('participants-list');
+    socket.removeAllListeners('meeting-ended');
+    socket.removeAllListeners('user-joined');
+    socket.removeAllListeners('user-left');
+    socket.removeAllListeners('error');
+
+    voiceSocket.removeAllListeners('connect');
+    voiceSocket.removeAllListeners('voice-joined');
+    voiceSocket.removeAllListeners('peer-joined');
+    voiceSocket.removeAllListeners('peer-disconnected');
+    voiceSocket.removeAllListeners('voice-error');
+    voiceSocket.removeAllListeners('force-disconnect');
+
+    //registras tus handlers:
     socket.on('connect', handleConnect);
     socket.on('receive-message', handleReceiveMessage);
     socket.on('participants-list', handleParticipantsList);
@@ -210,7 +227,7 @@ export default function VideoCall() {
     return () => {
       cleanupWebRTC();
     };
-  }, [socket, voiceSocket, user, meetingId, micOn, mediaStreamRef, initiateCall, navigate, showChat]);
+  }, [socket, voiceSocket, user, meetingId, micOn, mediaStreamRef, initiateCall, navigate]);
 
   // ==================== UI ====================
   const toggleChat = () => {
