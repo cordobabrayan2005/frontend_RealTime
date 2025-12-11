@@ -2,9 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import Peer from 'peerjs';
 import { useAuthStore } from '../stores/authStore';
 
-/**
- * Hook para manejar Peer.js y conexiones WebRTC para voz y video
- */
 export function usePeer(
   meetingId: string | undefined,
   voiceSocket: any,
@@ -23,7 +20,7 @@ export function usePeer(
   const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
   const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
-  // ==================== PEER DE VOZ (INDEPENDIENTE) ====================
+  // ==================== PEER DE VOZ (SOLO DEPENDE DE micOn) ====================
   useEffect(() => {
     if (!meetingId || !user || !voiceSocket || !micOn) {
       if (peerVoice) {
@@ -45,21 +42,33 @@ export function usePeer(
 
     newPeerVoice.on('open', (id) => {
       console.log('[FRONT] ✅ Peer voz conectado:', id);
-      setTimeout(() => {
-        voiceSocket.emit('join-voice-room', { meetingId, peerId: `${user.id}_voice`, userId: user.id });
-      }, 1000);
+      setPeerStatus('connected');
+      // Unirse inmediatamente sin delay
+      voiceSocket.emit('join-voice-room', { meetingId, peerId: `${user.id}_voice`, userId: user.id });
     });
 
     newPeerVoice.on('call', (call) => {
       if (mediaStreamRef.current && micOn) {
+        console.log('[FRONT] Contestando llamada de voz de:', call.peer);
         call.answer(mediaStreamRef.current);
         call.on('stream', (remoteStream) => {
+          console.log('[FRONT] Stream de voz recibido de:', call.peer);
           const audio = document.createElement('audio');
           audio.srcObject = remoteStream;
           audio.autoplay = true;
           audio.setAttribute('playsinline', 'true');
           audio.play().catch(err => console.error('Autoplay audio:', err));
         });
+        call.on('close', () => {
+          console.log('[FRONT] Llamada de voz cerrada');
+        });
+        call.on('error', (err) => {
+          console.error('[FRONT] Error en llamada de voz:', err);
+        });
+        peerCallsRef.current.set(call.peer, call);
+      } else {
+        console.log('[FRONT] Rechazando llamada de voz - no hay stream');
+        call.close();
       }
     });
 
@@ -74,9 +83,9 @@ export function usePeer(
       console.log('[FRONT] Cleanup: destruyendo peer voz');
       newPeerVoice.destroy();
     };
-  }, [meetingId, user?.id, voiceSocket, micOn]);  // Solo depende de micOn para voz
+  }, [meetingId, user?.id, voiceSocket, micOn]);  // Solo micOn
 
-  // ==================== PEER DE VIDEO (INDEPENDIENTE) ====================
+  // ==================== PEER DE VIDEO (SOLO DEPENDE DE cameraOn) ====================
   useEffect(() => {
     if (!meetingId || !user || !videoSocket || !cameraOn) {
       if (peerVideo) {
@@ -99,9 +108,8 @@ export function usePeer(
     newPeerVideo.on('open', (id) => {
       console.log('[FRONT] ✅ Peer video conectado:', id);
       setPeerStatus('connected');
-      setTimeout(() => {
-        videoSocket.emit('join-video-room', { meetingId, peerId: `${user.id}_video`, userId: user.id });
-      }, 1000);
+      // Unirse inmediatamente sin delay
+      videoSocket.emit('join-video-room', { meetingId, peerId: `${user.id}_video`, userId: user.id });
     });
 
     newPeerVideo.on('call', (call) => {
@@ -109,36 +117,30 @@ export function usePeer(
         console.warn('[FRONT] Incoming call has no peer ID, ignoring');
         return;
       }
-      console.log('[FRONT] Incoming call from:', call.peer);
+      console.log('[FRONT] Contestando llamada de video de:', call.peer);
 
       if (mediaStreamRef.current && cameraOn) {
-        console.log('[FRONT] Answering call with stream');
         call.answer(mediaStreamRef.current);
-
         call.on('stream', (remoteStream) => {
-          console.log('[FRONT] Received remote stream from:', call.peer);
+          console.log('[FRONT] Stream de video recibido de:', call.peer);
           const video = document.createElement('video');
           video.srcObject = remoteStream;
           video.autoplay = true;
           video.setAttribute('playsinline', 'true');
           video.muted = false;
           video.play().catch(err => console.error('Autoplay video:', err));
-
           remoteVideoRefs.current.set(call.peer, remoteStream);
         });
-
         call.on('close', () => {
-          console.log('[FRONT] Call closed');
+          console.log('[FRONT] Llamada de video cerrada');
           remoteVideoRefs.current.delete(call.peer);
         });
-
         call.on('error', (err) => {
-          console.error('[FRONT] Call error:', err);
+          console.error('[FRONT] Error en llamada de video:', err);
         });
-
         peerCallsRef.current.set(call.peer, call);
       } else {
-        console.log('[FRONT] Rejecting call - no stream');
+        console.log('[FRONT] Rechazando llamada de video - no hay stream');
         call.close();
       }
     });
@@ -154,19 +156,20 @@ export function usePeer(
       console.log('[FRONT] Cleanup: destruyendo peer video');
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, videoSocket, cameraOn]);  // Solo depende de cameraOn para video
+  }, [meetingId, user?.id, videoSocket, cameraOn]);  // Solo cameraOn
 
-  /**
-   * Iniciar llamadas para voz y video
-   */
+  // ==================== INICIAR LLAMADAS ====================
   const initiateCall = async (peerId: string) => {
-    if (micOn && peerVoice && mediaStreamRef.current && peerId.endsWith('_voice')) {
+    if (peerId.endsWith('_voice') && micOn && peerVoice && mediaStreamRef.current) {
+      console.log('[FRONT] Iniciando llamada de voz a:', peerId);
       const callVoice = peerVoice.call(peerId, mediaStreamRef.current);
       peerCallsRef.current.set(peerId, callVoice);
-    }
-    if (cameraOn && peerVideo && mediaStreamRef.current && peerId.endsWith('_video')) {
+    } else if (peerId.endsWith('_video') && cameraOn && peerVideo && mediaStreamRef.current) {
+      console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const callVideo = peerVideo.call(peerId, mediaStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
+    } else {
+      console.log('[FRONT] No se puede iniciar llamada - peer no disponible o media apagada');
     }
   };
 
