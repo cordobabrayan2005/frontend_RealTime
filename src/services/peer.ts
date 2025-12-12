@@ -129,6 +129,20 @@ export function usePeer(
           video.muted = false;
           video.play().catch(err => console.error('Autoplay video:', err));
         });
+        // Crear DataChannel para video state
+        const dataChannel = call.peerConnection.createDataChannel('video-channel');
+        dataChannel.onopen = () => {
+          console.log('[FRONT] DataChannel abierto para video con:', call.peer);
+          dataChannel.send(JSON.stringify({ type: 'video-state', enabled: cameraOn }));
+        };
+        dataChannel.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'video-state') {
+            console.log('[FRONT] Video state recibido:', data.enabled, 'de', call.peer);
+            // Manejar en Videocall.tsx
+          }
+        };
+        call.dataChannel = dataChannel;
       } else {
         console.log('[FRONT] Rechazando llamada de video - cámara apagada');
         call.close();
@@ -191,6 +205,17 @@ export function usePeer(
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
+      // Escuchar DataChannel
+      callVideo.peerConnection.ondatachannel = (event) => {
+        const dataChannel = event.channel;
+        dataChannel.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'video-state') {
+            console.log('[FRONT] Video state recibido:', data.enabled, 'de', peerId);
+            // Manejar en Videocall.tsx
+          }
+        };
+      };
     } else {
       console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
     }
@@ -205,6 +230,14 @@ export function usePeer(
     });
   };
 
+  const sendVideoStateToPeers = (enabled: boolean) => {
+    peerCallsRef.current.forEach((call) => {
+      if (call.dataChannel && call.dataChannel.readyState === 'open') {
+        call.dataChannel.send(JSON.stringify({ type: 'video-state', enabled }));
+      }
+    });
+  };
+
   // Exportar sendMuteToPeers
   return {
     peerVoice,
@@ -212,6 +245,7 @@ export function usePeer(
     peerStatus,
     peerCallsRef,
     initiateCall,
-    sendMuteToPeers
+    sendMuteToPeers,
+    sendVideoStateToPeers
   };
 }
