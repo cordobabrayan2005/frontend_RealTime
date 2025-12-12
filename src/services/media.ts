@@ -55,53 +55,25 @@ export function useMedia() {
           console.log('[FRONT] Obteniendo stream de video...');
           const stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: {
-              width: { ideal: 640 },
-              height: { ideal: 480 },
-              frameRate: { ideal: 30 }
-            }
+            video: true
           });
-
-          console.log('[FRONT] ✅ Stream de video obtenido', {
-            tracks: stream.getVideoTracks().length,
-            trackEnabled: stream.getVideoTracks()[0]?.enabled
-          });
-
           videoStreamRef.current = stream;
 
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
-            localVideoRef.current.play().catch(err =>
-              console.error('[FRONT] Error al reproducir video local:', err)
-            );
+            localVideoRef.current.play().catch(console.error);
           }
-
-          // Actualizar todas las llamadas de video existentes con el nuevo stream
-          // Esto se manejará en Videocall.tsx mediante sendVideoStateToPeers
         } catch (err: any) {
-          console.error('[FRONT] ❌ Error obteniendo video:', err.name, err.message);
+          console.error('[FRONT] ❌ Error obteniendo video:', err);
           setCameraOn(false);
         }
       } else if (!cameraOn && videoStreamRef.current) {
-        console.log('[FRONT] Apagando cámara, deteniendo stream...');
-        // No detener los tracks, solo deshabilitarlos
-        videoStreamRef.current.getTracks().forEach(track => {
-          track.enabled = false;
-        });
-
-        // Mantener la referencia al stream para poder reactivarlo
-        // No lo ponemos a null para poder reutilizarlo
+        videoStreamRef.current.getTracks().forEach(t => t.stop());
+        videoStreamRef.current = null;
       }
     }
-
     ensureVideo();
   }, [cameraOn]);
-
-  // Función para reemplazar tracks en llamadas existentes
-  const replaceVideoTrack = (newStream: MediaStream | null) => {
-    // Esta función será llamada desde Videocall.tsx cuando cambie el estado de la cámara
-    console.log('[FRONT] Reemplazando video track en llamadas existentes');
-  };
 
   // Limpiar al desmontar
   useEffect(() => {

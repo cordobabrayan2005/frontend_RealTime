@@ -40,7 +40,6 @@ export function useSockets(meetingId: string | undefined) {
     setVoiceSocket(newVoiceSocket);
 
     // 3. Socket de video
-    console.log('[FRONT] URL Video Socket:', VIDEO_BACKEND_URL);
     const newVideoSocket = io(VIDEO_BACKEND_URL, {
       auth: { token },
       reconnection: true,
@@ -48,14 +47,6 @@ export function useSockets(meetingId: string | undefined) {
       reconnectionDelay: 1000,
     });
     setVideoSocket(newVideoSocket);
-    
-    newVideoSocket.on('connect', () => {
-      console.log('[FRONT] ✅ Video socket conectado, ID:', newVideoSocket.id);
-    });
-
-    newVideoSocket.on('connect_error', (error) => {
-      console.error('[FRONT] ❌ Error conectando video socket:', error.message);
-    });
 
     // Obtener ICE servers de ambos backends
     fetch(`${VOICE_BACKEND_URL}/api/ice-servers`)
