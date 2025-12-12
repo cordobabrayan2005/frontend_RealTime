@@ -10,9 +10,12 @@ import { setupWebRTCHandlers } from '../services/webrtc';
 interface ParticipantVideoProps {
   participantId: string;
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>;
+  remoteVideoStates: Map<string, boolean>;
+  participantName: string;
 }
-function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoProps) {
+function ParticipantVideo({ participantId, remoteVideoRefs, remoteVideoStates, participantName }: ParticipantVideoProps) {  // Agregar participantName
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isVideoEnabled = remoteVideoStates.get(participantId) ?? true;
   useEffect(() => {
     const stream = remoteVideoRefs.current.get(participantId);
     if (videoRef.current && stream) {
@@ -21,11 +24,19 @@ function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoPr
     }
   }, [participantId, remoteVideoRefs]);
   return (
-    <video
-      ref={videoRef}
-      className="vc-remote-video"
-      playsInline
-    />
+    <div className="vc-card">
+      {isVideoEnabled ? (
+        <video
+          ref={videoRef}
+          className="vc-remote-video"
+          playsInline
+        />
+      ) : (
+        <div className="vc-avatar">
+          {participantName.split(' ').map((n: string) => n[0]).join('')}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -65,7 +76,8 @@ export default function VideoCall() {
     peerVideo,
     peerCallsRef,
     initiateCall,
-    sendMuteToPeers
+    sendMuteToPeers,
+    sendVideoStateToPeers
   } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
 
   const [showCode, setShowCode] = useState(false);
@@ -75,6 +87,7 @@ export default function VideoCall() {
   const [chatInput, setChatInput] = useState('');
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
+  const [remoteVideoStates, setRemoteVideoStates] = useState(new Map<string, boolean>());
 
   // 🔔 Modal no bloqueante
   const [modalVisible, setModalVisible] = useState(false);
@@ -398,7 +411,7 @@ export default function VideoCall() {
                 )
               ) : (
                 remoteVideoRefs.current.has(p.id) ? (
-                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} />
+                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} remoteVideoStates={remoteVideoStates} participantName={p.name} />
                 ) : (
                   <div className="vc-avatar">
                     {p.name.split(' ').map(n => n[0]).join('')}
@@ -416,7 +429,13 @@ export default function VideoCall() {
           className={`vc-control ${cameraOn ? 'on' : 'vc-control-muted'}`}
           title={cameraOn ? 'Apagar cámara' : 'Encender cámara'}
           aria-pressed={!cameraOn}
-          onClick={() => setCameraOn((s) => !s)}
+          onClick={() => {
+            setCameraOn((prev) => {
+              const newCameraOn = !prev;
+              sendVideoStateToPeers(newCameraOn);
+              return newCameraOn;
+            });
+          }}
         >
           {cameraOn ? '📷' : '🚫'}
         </button>
