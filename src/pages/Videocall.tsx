@@ -9,15 +9,15 @@ import { setupWebRTCHandlers } from '../services/webrtc';
 
 interface ParticipantVideoProps {
   participantId: string;
-  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>;
+  remoteVideoRefs: Map<string, MediaStream>;
   remoteVideoStates: Map<string, boolean>;
   participantName: string;
 }
-function ParticipantVideo({ participantId, remoteVideoRefs, remoteVideoStates, participantName }: ParticipantVideoProps) {  // Agregar participantName
+function ParticipantVideo({ participantId, remoteVideoRefs, remoteVideoStates, participantName }: ParticipantVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVideoEnabled = remoteVideoStates.get(participantId) ?? true;
   useEffect(() => {
-    const stream = remoteVideoRefs.current.get(participantId);
+    const stream = remoteVideoRefs.get(participantId);
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(console.error);
@@ -51,7 +51,7 @@ export default function VideoCall() {
   const meetingId = (location.state as any)?.meetingId;
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const remoteVideoRefs = useRef(new Map<string, MediaStream>());
+  const [remoteVideoRefs, setRemoteVideoRefs] = useState(new Map<string, MediaStream>());
 
   const {
     audioStreamRef,  // Nuevo: Usar audioStreamRef para voz
@@ -62,6 +62,18 @@ export default function VideoCall() {
     micOn,
     setMicOn
   } = useMedia();
+
+  const onRemoteVideoStream = (userId: string, stream: MediaStream) => {
+    setRemoteVideoRefs(prev => new Map(prev).set(userId, stream));
+  };
+
+  const onRemoteVideoStreamRemoved = (userId: string) => {
+    setRemoteVideoRefs(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(userId);
+      return newMap;
+    });
+  };
 
   const {
     socket,
@@ -78,7 +90,7 @@ export default function VideoCall() {
     initiateCall,
     sendMuteToPeers,
     sendVideoStateToPeers
-  } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
+  } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, onRemoteVideoStream, onRemoteVideoStreamRemoved);
 
   const [showCode, setShowCode] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -410,7 +422,7 @@ export default function VideoCall() {
                   </div>
                 )
               ) : (
-                remoteVideoRefs.current.has(p.id) ? (
+                remoteVideoRefs.has(p.id) ? (
                   <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} remoteVideoStates={remoteVideoStates} participantName={p.name} />
                 ) : (
                   <div className="vc-avatar">
