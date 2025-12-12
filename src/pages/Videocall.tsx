@@ -261,15 +261,15 @@ export default function VideoCall() {
       setModalVisible(true);
     };
 
-    const handleVideoJoined = (data: { peers: string[] }) => {
+    const handleVideoJoined = (data: { peers?: string[] }) => {
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
-      console.log('[FRONT] Estado actual de cámara:', cameraOn);
-      data.peers.forEach(peerId => {
-        console.log('[FRONT] Iniciando llamada de video a:', peerId);
-        initiateCall(peerId); // Siempre iniciar, incluso con cámara apagada
-      });
+      if (data.peers && Array.isArray(data.peers)) {
+        data.peers.forEach(peerId => {
+          console.log('[FRONT] Iniciando llamada de video a:', peerId);
+          initiateCall(peerId);
+        });
+      }
     };
-
     const handlePeerJoinedVideo = (peerId: string) => {
       console.log('[FRONT] Peer joined video:', peerId);
       console.log('[FRONT] Estado actual de cámara:', cameraOn);
@@ -535,7 +535,7 @@ export default function VideoCall() {
       .then(data => console.log('✅ Backend video conectado:', data))
       .catch(err => console.error('❌ Error conectando al backend video:', err));
 
-    fetch(`${import.meta.env.VITE_VIDEO_BACKEND_URL}/peerjs/health`)
+    fetch(`${import.meta.env.VITE_VIDEO_BACKEND_URL}/api/peerjs/health`)
       .then(res => res.json())
       .then(data => console.log('✅ PeerJS video conectado:', data))
       .catch(err => console.error('❌ Error conectando a PeerJS video:', err));
