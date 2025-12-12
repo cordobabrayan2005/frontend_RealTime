@@ -20,7 +20,7 @@ function ParticipantVideo({ participantId, remoteVideoRefs, remoteVideoStates, p
     const stream = remoteVideoRefs.get(participantId);
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(console.error);
+      videoRef.current.play().catch((err: Error) => console.error(err));
     }
   }, [participantId, remoteVideoRefs]);
   return (
@@ -140,25 +140,25 @@ export default function VideoCall() {
       peerCallsRef.current?.forEach((call) => {
         try {
           call.close();
-        } catch { }
+        } catch (error: any) { }
       });
       peerCallsRef.current?.clear();
       // FORZAR apagado del micrófono y cámara
-      if (audioStreamRef.current) {  // Corregido: Usar audioStreamRef
-        audioStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {  // Agregado tipo
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {
           try {
             track.enabled = false;
             track.stop();
-          } catch { }
+          } catch (error: any) { }
         });
         audioStreamRef.current = null;
       }
-      if (videoStreamRef.current) {  // Corregido: Usar videoStreamRef
-        videoStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {  // Agregado tipo
+      if (videoStreamRef.current) {
+        videoStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {
           try {
             track.enabled = false;
             track.stop();
-          } catch { }
+          } catch (error: any) { }
         });
         videoStreamRef.current = null;
       }
@@ -166,12 +166,12 @@ export default function VideoCall() {
       try {
         peerVoice?.destroy();
         peerVideo?.destroy();
-      } catch { }
+      } catch (error: any) { }
       // Forzar desconexión de sockets
       try {
         voiceSocket?.disconnect();
         videoSocket?.disconnect();
-      } catch { }
+      } catch (error: any) { }
     };
 
     const handleForceDisconnect = () => {
@@ -249,14 +249,18 @@ export default function VideoCall() {
 
     const handleVideoJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
+      console.log('[FRONT] Estado actual de cámara:', cameraOn);
       data.peers.forEach(peerId => {
-        if (cameraOn) initiateCall(peerId);
+        console.log('[FRONT] Iniciando llamada de video a:', peerId);
+        initiateCall(peerId); // Siempre iniciar, incluso con cámara apagada
       });
     };
 
     const handlePeerJoinedVideo = (peerId: string) => {
       console.log('[FRONT] Peer joined video:', peerId);
-      if (cameraOn) initiateCall(peerId);
+      console.log('[FRONT] Estado actual de cámara:', cameraOn);
+      console.log('[FRONT] Iniciando llamada de video a:', peerId);
+      initiateCall(peerId); // Siempre iniciar, incluso con cámara apagada
     };
 
     const handleVideoError = (msg: string) => {
@@ -318,14 +322,36 @@ export default function VideoCall() {
     };
   }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate]);  // Corregido: Agregar audioStreamRef y videoStreamRef
 
+  // ==================== MANEJO DE ESTADOS DE VIDEO REMOTOS ====================
+  useEffect(() => {
+    const handleRemoteVideoState = (data: { peerId: string; enabled: boolean }) => {
+      console.log('[FRONT] Estado de video remoto recibido:', data);
+      const userId = data.peerId.split('_')[0]; // Extraer userId del peerId
+      setRemoteVideoStates(prev => new Map(prev).set(userId, data.enabled));
+    };
+
+    // Escuchar eventos de socket para estados de video
+    if (videoSocket) {
+      videoSocket.on('video-state', handleRemoteVideoState);
+      videoSocket.on('media-state-changed', handleRemoteVideoState);
+    }
+
+    return () => {
+      if (videoSocket) {
+        videoSocket.off('video-state', handleRemoteVideoState);
+        videoSocket.off('media-state-changed', handleRemoteVideoState);
+      }
+    };
+  }, [videoSocket]);
+
   // ==================== UI ====================
   const toggleChat = () => {
-    setShowChat((s) => !s);
+    setShowChat((s: boolean) => !s);
     if (!showChat) setHasNewMessages(false);
   };
 
   const toggleCode = () => {
-    setShowCode((s) => !s);
+    setShowCode((s: boolean) => !s);
   };
 
   const copyCode = () => {
@@ -391,6 +417,98 @@ export default function VideoCall() {
     );
   }
 
+  // Añade esta función para debug
+  const debugStreams = () => {
+    console.log('=== DEBUG STREAMS ===');
+    console.log('Audio stream:', audioStreamRef.current ? '✅' : '❌');
+    console.log('Video stream:', videoStreamRef.current ? '✅' : '❌');
+    console.log('Remote video refs:', Array.from(remoteVideoRefs.entries()));
+    console.log('Peer calls:', Array.from(peerCallsRef.current?.entries() || []));
+    console.log('Camera on:', cameraOn);
+    console.log('Mic on:', micOn);
+  };
+
+  // ==================== MANEJO DE CÁMARA ====================
+  const handleToggleCamera = async () => {
+    const newCameraOn = !cameraOn;
+    console.log('[FRONT] Cambiando cámara a:', newCameraOn, {
+      tieneStreamActual: !!videoStreamRef.current
+    });
+
+    // Si se está encendiendo la cámara y no tenemos stream, obtenerlo
+    if (newCameraOn && !videoStreamRef.current) {
+      try {
+        console.log('[FRONT] Obteniendo nuevo stream de video...');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 }
+          },
+          audio: false
+        });
+
+        console.log('[FRONT] ✅ Stream de video obtenido, tracks:', stream.getVideoTracks().length);
+        videoStreamRef.current = stream;
+
+        // Actualizar video local
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch((err: Error) =>
+            console.error('[FRONT] Error al reproducir video local:', err)
+          );
+        }
+
+        // Reemplazar tracks en llamadas de video existentes
+        peerCallsRef.current.forEach((call, peerId) => {
+          if (peerId.endsWith('_video') && call.peerConnection) {
+            console.log('[FRONT] Reemplazando video track para:', peerId);
+            const videoTrack = stream.getVideoTracks()[0];
+            if (videoTrack) {
+              const sender = call.peerConnection.getSenders().find(
+                (s: RTCRtpSender) => s.track && s.track.kind === 'video'
+              );
+              if (sender) {
+                sender.replaceTrack(videoTrack).catch((err: Error) =>
+                  console.error('[FRONT] Error reemplazando track:', err)
+                );
+              }
+            }
+          }
+        });
+
+      } catch (err: any) {
+        console.error('[FRONT] Error al obtener video:', err.name, err.message);
+        // No cambiar el estado si hay error
+        return;
+      }
+    } else if (!newCameraOn && videoStreamRef.current) {
+      // Apagar cámara - deshabilitar tracks
+      console.log('[FRONT] Apagando cámara, deshabilitando tracks...');
+      videoStreamRef.current.getVideoTracks().forEach(track => {
+        track.enabled = false;
+      });
+
+      // Enviar stream vacío a las llamadas de video existentes
+      peerCallsRef.current.forEach((call, peerId) => {
+        if (peerId.endsWith('_video') && call.peerConnection) {
+          const sender = call.peerConnection.getSenders().find(
+            (s: RTCRtpSender) => s.track && s.track.kind === 'video'
+          );
+          if (sender) {
+            console.log('[FRONT] Enviando track nulo para:', peerId);
+            sender.replaceTrack(null).catch((err: Error) => console.error(err));
+          }
+        }
+      });
+    }
+
+    // Actualizar estado local
+    setCameraOn(newCameraOn);
+
+    // Enviar estado a otros peers
+    sendVideoStateToPeers(newCameraOn);
+  };
 
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">
@@ -441,13 +559,7 @@ export default function VideoCall() {
           className={`vc-control ${cameraOn ? 'on' : 'vc-control-muted'}`}
           title={cameraOn ? 'Apagar cámara' : 'Encender cámara'}
           aria-pressed={!cameraOn}
-          onClick={() => {
-            setCameraOn((prev) => {
-              const newCameraOn = !prev;
-              sendVideoStateToPeers(newCameraOn);
-              return newCameraOn;
-            });
-          }}
+          onClick={handleToggleCamera}
         >
           {cameraOn ? '📷' : '🚫'}
         </button>

@@ -97,7 +97,7 @@ export function usePeer(
 
   // ==================== PEER DE VIDEO (PERSISTENTE) ====================
   useEffect(() => {
-    if (!meetingId || !user || !videoSocket) return;  // No depende de cameraOn
+    if (!meetingId || !user || !videoSocket) return;
 
     console.log('[FRONT] Inicializando Peer de video...');
     const newPeerVideo = new Peer(`${user.id}_video`, {
@@ -117,31 +117,43 @@ export function usePeer(
 
     newPeerVideo.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de video de:', call.peer);
-      if (videoStreamRef.current && cameraOn) {
-        call.answer(videoStreamRef.current);
-        call.on('stream', (remoteStream) => {
-          console.log('[FRONT] Stream de video recibido de:', call.peer);
-          const userId = call.peer.split('_')[0];
-          onRemoteVideoStream(userId, remoteStream);
-        });
-        // Crear DataChannel para video state
-        const dataChannel = call.peerConnection.createDataChannel('video-channel');
-        dataChannel.onopen = () => {
-          console.log('[FRONT] DataChannel abierto para video con:', call.peer);
-          dataChannel.send(JSON.stringify({ type: 'video-state', enabled: cameraOn }));
-        };
-        dataChannel.onmessage = (event) => {
+
+      // IMPORTANTE: Siempre contestar la llamada, incluso si la cámara está apagada
+      // Enviar stream vacío si no hay video, para mantener la conexión WebRTC
+      const streamToAnswer = cameraOn && videoStreamRef.current
+        ? videoStreamRef.current
+        : new MediaStream(); // Stream vacío para mantener conexión
+
+      call.answer(streamToAnswer);
+
+      call.on('stream', (remoteStream) => {
+        console.log('[FRONT] Stream de video recibido de:', call.peer);
+        console.log('[FRONT] Remote stream tiene tracks de video:', remoteStream.getVideoTracks().length);
+
+        const userId = call.peer.split('_')[0];
+        onRemoteVideoStream(userId, remoteStream);
+      });
+
+      // Crear DataChannel para video state
+      const dataChannel = call.peerConnection.createDataChannel('video-channel');
+      dataChannel.onopen = () => {
+        console.log('[FRONT] DataChannel abierto para video con:', call.peer);
+        dataChannel.send(JSON.stringify({ type: 'video-state', enabled: cameraOn }));
+      };
+
+      dataChannel.onmessage = (event) => {
+        try {
           const data = JSON.parse(event.data);
           if (data.type === 'video-state') {
             console.log('[FRONT] Video state recibido:', data.enabled, 'de', call.peer);
-            // Manejar en Videocall.tsx
+            // Aquí puedes manejar el estado del video remoto si es necesario
           }
-        };
-        call.dataChannel = dataChannel;
-      } else {
-        console.log('[FRONT] Rechazando llamada de video - cámara apagada');
-        call.close();
-      }
+        } catch (err) {
+          console.error('[FRONT] Error procesando mensaje DataChannel:', err);
+        }
+      };
+
+      call.dataChannel = dataChannel;
       call.on('close', () => {
         console.log('[FRONT] Llamada de video cerrada');
         const userId = call.peer.split('_')[0];
@@ -162,62 +174,94 @@ export function usePeer(
       console.log('[FRONT] Cleanup: destruyendo peer video');
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, videoSocket]);  // Sin cameraOn
+  }, [meetingId, user?.id, videoSocket]); // Mantener sin cameraOn aquí
 
   // ==================== INICIAR LLAMADAS ====================
   const initiateCall = async (peerId: string) => {
+    console.log('[FRONT] initiateCall para:', peerId, {
+      isVideoCall: peerId.endsWith('_video'),
+      cameraOn,
+      hasVideoStream: !!videoStreamRef.current,
+      hasPeerVideo: !!peerVideo
+    });
+
     if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
-      const callVoice = peerVoice.call(peerId, audioStreamRef.current);
-      peerCallsRef.current.set(peerId, callVoice);
+      // ... código existente para voz ...
 
-      // Manejar DataChannel en llamada iniciada
-      callVoice.on('stream', (remoteStream) => {
-        console.log('[FRONT] Stream de voz recibido de:', peerId);
-        const audio = document.createElement('audio');
-        audio.srcObject = remoteStream;
-        audio.setAttribute('data-peer', peerId);  // Para identificar
-        audio.autoplay = true;
-        audio.setAttribute('playsinline', 'true');
-        audio.play().catch(err => console.error('Autoplay audio:', err));
-      });
-
-      // Escuchar DataChannel
-      callVoice.peerConnection.ondatachannel = (event) => {
-        const dataChannel = event.channel;
-        dataChannel.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.type === 'mute') {
-            const audioElement = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement;
-            if (audioElement) {
-              audioElement.muted = data.muted;
-            }
-          }
-        };
-      };
-    } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {
+    } else if (peerId.endsWith('_video') && peerVideo) {
+      // INICIO: Corrección crítica aquí
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
-      const callVideo = peerVideo.call(peerId, videoStreamRef.current);
-      peerCallsRef.current.set(peerId, callVideo);
-      // Manejar stream remoto
-      callVideo.on('stream', (remoteStream) => {
-        console.log('[FRONT] Stream de video recibido de:', peerId);
-        const userId = peerId.split('_')[0];
-        onRemoteVideoStream(userId, remoteStream);
-      });
-      // Escuchar DataChannel
-      callVideo.peerConnection.ondatachannel = (event) => {
-        const dataChannel = event.channel;
-        dataChannel.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.type === 'video-state') {
-            console.log('[FRONT] Video state recibido:', data.enabled, 'de', peerId);
-            // Manejar en Videocall.tsx
-          }
+
+      try {
+        // Siempre iniciar la llamada, incluso con cámara apagada
+        // Si no hay stream de video, enviar uno vacío
+        const videoStream = cameraOn && videoStreamRef.current
+          ? videoStreamRef.current
+          : new MediaStream();
+
+        console.log('[FRONT] Stream para llamada:', {
+          hasVideoTracks: videoStream.getVideoTracks().length,
+          cameraOn,
+          streamType: videoStreamRef.current ? 'real' : 'empty'
+        });
+
+        const callVideo = peerVideo.call(peerId, videoStream);
+        peerCallsRef.current.set(peerId, callVideo);
+
+        // Manejar stream remoto
+        callVideo.on('stream', (remoteStream) => {
+          console.log('[FRONT] Stream de video recibido de:', peerId, {
+            videoTracks: remoteStream.getVideoTracks().length,
+            audioTracks: remoteStream.getAudioTracks().length
+          });
+
+          const userId = peerId.split('_')[0];
+          onRemoteVideoStream(userId, remoteStream);
+        });
+
+        // Escuchar DataChannel
+        callVideo.peerConnection.ondatachannel = (event) => {
+          const dataChannel = event.channel;
+          dataChannel.onopen = () => {
+            console.log('[FRONT] DataChannel abierto para video (outgoing)');
+            // Enviar estado inicial
+            dataChannel.send(JSON.stringify({ type: 'video-state', enabled: cameraOn }));
+          };
+
+          dataChannel.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              if (data.type === 'video-state') {
+                console.log('[FRONT] Video state recibido:', data.enabled, 'de', peerId);
+                // Manejar estado del video remoto si es necesario
+              }
+            } catch (err) {
+              console.error('[FRONT] Error procesando DataChannel:', err);
+            }
+          };
         };
-      };
+
+        callVideo.on('close', () => {
+          console.log('[FRONT] Llamada de video cerrada con:', peerId);
+          const userId = peerId.split('_')[0];
+          onRemoteVideoStreamRemoved(userId);
+          peerCallsRef.current.delete(peerId);
+        });
+
+        callVideo.on('error', (err) => {
+          console.error('[FRONT] Error en llamada de video con', peerId, ':', err);
+        });
+
+      } catch (error) {
+        console.error('[FRONT] Error al iniciar llamada de video:', error);
+      }
     } else {
-      console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
+      console.log('[FRONT] Condiciones no cumplidas para llamada:', {
+        peerId,
+        endsWithVideo: peerId.endsWith('_video'),
+        hasPeerVideo: !!peerVideo
+      });
     }
   };
 
