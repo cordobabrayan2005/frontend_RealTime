@@ -224,13 +224,15 @@ export default function VideoCall() {
     const handleVoiceJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
       data.peers.forEach(peerId => {
-        if (micOn) initiateCall(peerId);
+        console.log('[FRONT] Iniciando llamada de voz a:', peerId);
+        initiateCall(peerId); // Siempre iniciar, incluso con mic muteado
       });
     };
 
     const handlePeerJoined = (peerId: string) => {
       console.log('[FRONT] Peer joined voice:', peerId);
-      if (micOn) initiateCall(peerId);
+      console.log('[FRONT] Iniciando llamada de voz a:', peerId);
+      initiateCall(peerId); // Siempre iniciar, incluso con mic muteado
     };
 
     const handlePeerDisconnected = (peerId: string) => {
