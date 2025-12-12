@@ -6,11 +6,12 @@ export function usePeer(
   meetingId: string | undefined,
   voiceSocket: any,
   videoSocket: any,
-  audioStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar audioStreamRef
-  videoStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar videoStreamRef
+  audioStreamRef: React.RefObject<MediaStream | null>,
+  videoStreamRef: React.RefObject<MediaStream | null>,
   cameraOn: boolean,
   micOn: boolean,
-  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>
+  onRemoteVideoStream: (userId: string, stream: MediaStream) => void,
+  onRemoteVideoStreamRemoved: (userId: string) => void
 ) {
   const { user } = useAuthStore();
   const [peerVoice, setPeerVoice] = useState<Peer | null>(null);
@@ -121,13 +122,7 @@ export function usePeer(
         call.on('stream', (remoteStream) => {
           console.log('[FRONT] Stream de video recibido de:', call.peer);
           const userId = call.peer.split('_')[0];
-          remoteVideoRefs.current.set(userId, remoteStream);
-          const video = document.createElement('video');
-          video.srcObject = remoteStream;
-          video.autoplay = true;
-          video.setAttribute('playsinline', 'true');
-          video.muted = false;
-          video.play().catch(err => console.error('Autoplay video:', err));
+          onRemoteVideoStream(userId, remoteStream);
         });
         // Crear DataChannel para video state
         const dataChannel = call.peerConnection.createDataChannel('video-channel');
@@ -150,7 +145,7 @@ export function usePeer(
       call.on('close', () => {
         console.log('[FRONT] Llamada de video cerrada');
         const userId = call.peer.split('_')[0];
-        remoteVideoRefs.current.delete(userId);
+        onRemoteVideoStreamRemoved(userId);
       });
       call.on('error', (err) => console.error('[FRONT] Error en llamada de video:', err));
       peerCallsRef.current.set(call.peer, call);
@@ -201,10 +196,15 @@ export function usePeer(
         };
       };
     } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {
-      // Video sin cambios
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
+      // Manejar stream remoto
+      callVideo.on('stream', (remoteStream) => {
+        console.log('[FRONT] Stream de video recibido de:', peerId);
+        const userId = peerId.split('_')[0];
+        onRemoteVideoStream(userId, remoteStream);
+      });
       // Escuchar DataChannel
       callVideo.peerConnection.ondatachannel = (event) => {
         const dataChannel = event.channel;
