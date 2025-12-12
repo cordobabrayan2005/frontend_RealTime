@@ -15,21 +15,33 @@ interface ParticipantVideoProps {
 }
 function ParticipantVideo({ participantId, remoteVideoRefs, remoteVideoStates, participantName }: ParticipantVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const isVideoEnabled = remoteVideoStates.get(participantId) ?? true;
+  const stream = remoteVideoRefs.get(participantId);
+  const hasStream = !!stream;
+
   useEffect(() => {
-    const stream = remoteVideoRefs.get(participantId);
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
-      videoRef.current.play().catch((err: Error) => console.error(err));
+      videoRef.current.play().catch((err: Error) => {
+        console.log('Auto-play bloqueado, esperando interacción...');
+        // Intentar reproducir al hacer click
+        const playOnInteraction = () => {
+          videoRef.current?.play();
+          document.removeEventListener('click', playOnInteraction);
+        };
+        document.addEventListener('click', playOnInteraction, { once: true });
+      });
     }
-  }, [participantId, remoteVideoRefs]);
+  }, [stream]);
+
   return (
     <div className="vc-card">
-      {isVideoEnabled ? (
+      {hasStream ? (
         <video
           ref={videoRef}
           className="vc-remote-video"
           playsInline
+          autoPlay
+          muted={false}
         />
       ) : (
         <div className="vc-avatar">
@@ -511,6 +523,23 @@ export default function VideoCall() {
     // Enviar estado a otros peers
     sendVideoStateToPeers(newCameraOn);
   };
+
+  useEffect(() => {
+    console.log('=== CONFIGURACIÓN DE VIDEO ===');
+    console.log('Video Backend URL:', import.meta.env.VITE_VIDEO_BACKEND_URL);
+    console.log('PeerJS Host Video:', import.meta.env.VITE_PEERJS_HOST_VIDEO);
+
+    // Probar conexión al backend de video
+    fetch(`${import.meta.env.VITE_VIDEO_BACKEND_URL}/api/health`)
+      .then(res => res.text())
+      .then(data => console.log('✅ Backend video conectado:', data))
+      .catch(err => console.error('❌ Error conectando al backend video:', err));
+
+    fetch(`${import.meta.env.VITE_VIDEO_BACKEND_URL}/peerjs/health`)
+      .then(res => res.json())
+      .then(data => console.log('✅ PeerJS video conectado:', data))
+      .catch(err => console.error('❌ Error conectando a PeerJS video:', err));
+  }, []);
 
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">

@@ -280,11 +280,27 @@ export function usePeer(
         callVideo.on('stream', (remoteStream) => {
           console.log('[FRONT] Stream de video recibido de:', peerId, {
             videoTracks: remoteStream.getVideoTracks().length,
-            audioTracks: remoteStream.getAudioTracks().length
+            videoTrackEnabled: remoteStream.getVideoTracks()[0]?.enabled,
+            audioTracks: remoteStream.getAudioTracks().length,
+            streamActive: remoteStream.active
           });
 
           const userId = peerId.split('_')[0];
           onRemoteVideoStream(userId, remoteStream);
+
+          // 🔥 DEBUG: Verificar si el video se puede reproducir
+          setTimeout(() => {
+            const videoElements = document.querySelectorAll('.vc-remote-video');
+            videoElements.forEach((video, i) => {
+              const v = video as HTMLVideoElement;
+              console.log(`Video ${i}:`, {
+                srcObject: v.srcObject ? '✅' : '❌',
+                paused: v.paused,
+                readyState: v.readyState,
+                error: v.error
+              });
+            });
+          }, 1000);
         });
 
         // Escuchar DataChannel
