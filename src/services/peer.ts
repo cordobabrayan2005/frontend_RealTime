@@ -29,7 +29,7 @@ export function usePeer(
     console.log('[FRONT] Inicializando Peer de voz...');
     const newPeerVoice = new Peer(`${user.id}_voice`, {
       host: PEERJS_HOST_VOICE,
-      path: '/api/peerjs', // <-- ¡FALTANTE! Debe ser igual que video
+      path: '/',
       secure: true,
       port: 443,
       debug: 1,
