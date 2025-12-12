@@ -24,12 +24,12 @@ export function usePeer(
 
   // ==================== PEER DE VOZ (PERSISTENTE) ====================
   useEffect(() => {
-    if (!meetingId || !user || !voiceSocket) return;  // No depende de micOn
+    if (!meetingId || !user || !voiceSocket) return;
 
     console.log('[FRONT] Inicializando Peer de voz...');
     const newPeerVoice = new Peer(`${user.id}_voice`, {
       host: PEERJS_HOST_VOICE,
-      path: '/',
+      path: '/api/peerjs', // <-- ¡FALTANTE! Debe ser igual que video
       secure: true,
       port: 443,
       debug: 1,
@@ -108,11 +108,16 @@ export function usePeer(
     console.log('[FRONT] Inicializando Peer de video...');
     const newPeerVideo = new Peer(`${user.id}_video`, {
       host: PEERJS_HOST_VIDEO,
-      path: '/',
+      path: '/api/peerjs',
       secure: true,
       port: 443,
       debug: 1,
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
     });
 
     newPeerVideo.on('open', (id) => {
@@ -171,6 +176,20 @@ export function usePeer(
 
     newPeerVideo.on('error', (err) => {
       console.error('[FRONT] Error Peer video:', err);
+
+      if (err.type === 'peer-unavailable') {
+        console.warn('[FRONT] PeerJS no disponible, intentando reconectar...');
+        // Podrías intentar reconectar después de un tiempo
+        setTimeout(() => {
+          if (videoSocket && user) {
+            videoSocket.emit('join-video-room', {
+              meetingId,
+              peerId: `${user.id}_video`,
+              userId: user.id
+            });
+          }
+        }, 3000);
+      }
       setPeerStatus('error');
     });
 
