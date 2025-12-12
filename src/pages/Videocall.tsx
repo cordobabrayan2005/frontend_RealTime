@@ -261,15 +261,19 @@ export default function VideoCall() {
       setModalVisible(true);
     };
 
-    const handleVideoJoined = (data: { peers?: string[] }) => {
+    const handleVideoJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
-      if (data.peers && Array.isArray(data.peers)) {
+      if (data.peers && Array.isArray(data.peers) && user?.id) {
         data.peers.forEach(peerId => {
-          console.log('[FRONT] Iniciando llamada de video a:', peerId);
-          initiateCall(peerId);
+          // Verificar que user.id existe y que no somos nosotros
+          if (peerId && !peerId.includes(user.id)) {
+            console.log('[FRONT] Iniciando llamada de video a:', peerId);
+            initiateCall(peerId);
+          }
         });
       }
     };
+
     const handlePeerJoinedVideo = (peerId: string) => {
       console.log('[FRONT] Peer joined video:', peerId);
       console.log('[FRONT] Estado actual de cámara:', cameraOn);
@@ -336,6 +340,41 @@ export default function VideoCall() {
     };
   }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate]);  // Corregido: Agregar audioStreamRef y videoStreamRef
 
+  // AGREGAR ESTE useEffect DESPUÉS DEL PRIMER useEffect DE SOCKETS
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleMeetingEndedByHost = (data: { message: string }) => {
+      console.log('[FRONT] Reunión terminada por el anfitrión:', data);
+
+      // Limpiar medios
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (videoStreamRef.current) {
+        videoStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+
+      // Cerrar todas las llamadas
+      peerCallsRef.current?.forEach(call => call.close());
+
+      // Mostrar mensaje y redirigir
+      setMeetingEnded(true);
+      setModalMessage(data.message || 'La reunión ha terminado');
+      setModalVisible(true);
+
+      setTimeout(() => {
+        navigate('/realtime');
+      }, 2000);
+    };
+
+    socket.on('meeting-ended', handleMeetingEndedByHost);
+
+    return () => {
+      socket.off('meeting-ended', handleMeetingEndedByHost);
+    };
+  }, [socket, navigate]);
+
   // ==================== MANEJO DE ESTADOS DE VIDEO REMOTOS ====================
   useEffect(() => {
     const handleRemoteVideoState = (data: { peerId: string; enabled: boolean }) => {
@@ -395,6 +434,9 @@ export default function VideoCall() {
   };
 
   const hangup = async () => {
+    console.log('[FRONT] Colgando llamada...', { isCreator });
+
+    // Si es el creador, terminar la reunión para todos
     if (isCreator && meetingId) {
       try {
         const { token } = useAuthStore.getState();
@@ -402,12 +444,43 @@ export default function VideoCall() {
           method: 'PUT',
           headers: { 'Authorization': `Bearer ${token}` },
         });
+
+        // Emitir a todos que la reunión terminó
         socket?.emit('end-meeting', meetingId);
       } catch (error) {
-        console.error('Error finalizando reunión:', error);
+        console.error('[FRONT] Error finalizando reunión:', error);
       }
     }
 
+    // FALTA: Limpiar los peers de voz y video antes de salir
+    // AGREGAR ESTO:
+    if (peerVoice) {
+      try {
+        peerVoice.destroy();
+      } catch (err) {
+        console.error('[FRONT] Error destruyendo peer voz:', err);
+      }
+    }
+
+    if (peerVideo) {
+      try {
+        peerVideo.destroy();
+      } catch (err) {
+        console.error('[FRONT] Error destruyendo peer video:', err);
+      }
+    }
+
+    // Cerrar todas las llamadas activas
+    peerCallsRef.current?.forEach(call => {
+      try {
+        call.close();
+      } catch (err) {
+        console.error('[FRONT] Error cerrando llamada:', err);
+      }
+    });
+    peerCallsRef.current?.clear();
+
+    // Salir de las salas
     if (user && voiceSocket) {
       voiceSocket.emit('leave-voice-room', { meetingId, peerId: user.id });
     }
@@ -417,6 +490,7 @@ export default function VideoCall() {
 
     setParticipants([]);
     setShowChat(false);
+    // Redirigir
     navigate('/realtime');
   };
 
@@ -529,16 +603,37 @@ export default function VideoCall() {
     console.log('Video Backend URL:', import.meta.env.VITE_VIDEO_BACKEND_URL);
     console.log('PeerJS Host Video:', import.meta.env.VITE_PEERJS_HOST_VIDEO);
 
+    // ERROR: No maneja el caso donde las URLs no están definidas
+    if (!import.meta.env.VITE_VIDEO_BACKEND_URL) {
+      console.error('❌ VITE_VIDEO_BACKEND_URL no está definida');
+      return;
+    }
+
     // Probar conexión al backend de video
     fetch(`${import.meta.env.VITE_VIDEO_BACKEND_URL}/api/health`)
-      .then(res => res.text())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
       .then(data => console.log('✅ Backend video conectado:', data))
       .catch(err => console.error('❌ Error conectando al backend video:', err));
 
+    // Intentar PeerJS pero manejando el error 401
     fetch(`${import.meta.env.VITE_VIDEO_BACKEND_URL}/api/peerjs/health`)
-      .then(res => res.json())
-      .then(data => console.log('✅ PeerJS video conectado:', data))
-      .catch(err => console.error('❌ Error conectando a PeerJS video:', err));
+      .then(res => {
+        if (!res.ok) {
+          console.warn('⚠️ PeerJS health check devolvió:', res.status);
+          return null;
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data) console.log('✅ PeerJS video conectado:', data);
+      })
+      .catch(err => {
+        // Esto es normal si PeerJS requiere autenticación
+        console.log('ℹ️ PeerJS health puede requerir autenticación:', err.message);
+      });
   }, []);
 
   return (
