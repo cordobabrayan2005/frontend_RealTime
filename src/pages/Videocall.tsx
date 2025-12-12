@@ -205,8 +205,8 @@ export default function VideoCall() {
       setTimeout(() => navigate('/realtime'), 1500);
     };
 
-    const handleMeetingEnded = (message: string) => {
-      console.log('[FRONT] Reunión terminada:', message);
+    const handleMeetingEndedMessage = (message: string) => {
+      console.log('[FRONT] Reunión terminada (mensaje):', message);
       cleanupMedia();
       setMeetingEnded(true);
       setModalMessage(message);
@@ -314,7 +314,7 @@ export default function VideoCall() {
     socket.on('connect', handleConnect);
     socket.on('receive-message', handleReceiveMessage);
     socket.on('participants-list', handleParticipantsList);
-    socket.on('meeting-ended', handleMeetingEnded);
+    socket.on('meeting-ended', handleMeetingEndedMessage);
     socket.on('user-joined', handleUserJoined);
     socket.on('user-left', handleUserLeft);
     socket.on('error', handleSocketError);
@@ -345,7 +345,7 @@ export default function VideoCall() {
     if (!socket) return;
 
     const handleMeetingEndedByHost = (data: { message: string }) => {
-      console.log('[FRONT] Reunión terminada por el anfitrión:', data);
+      console.log('[FRONT] Reunión terminada por el anfitrión (objeto):', data);
 
       // Limpiar medios
       if (audioStreamRef.current) {
@@ -360,7 +360,7 @@ export default function VideoCall() {
 
       // Mostrar mensaje y redirigir
       setMeetingEnded(true);
-      setModalMessage(data.message || 'La reunión ha terminado');
+      setModalMessage(data.message || 'El anfitrión ha terminado la reunión');
       setModalVisible(true);
 
       setTimeout(() => {
@@ -368,10 +368,11 @@ export default function VideoCall() {
       }, 2000);
     };
 
-    socket.on('meeting-ended', handleMeetingEndedByHost);
+    // IMPORTANTE: Usar un nombre de evento DIFERENTE
+    socket.on('meeting-ended-by-host', handleMeetingEndedByHost);
 
     return () => {
-      socket.off('meeting-ended', handleMeetingEndedByHost);
+      socket.off('meeting-ended-by-host', handleMeetingEndedByHost);
     };
   }, [socket, navigate]);
 
@@ -445,15 +446,21 @@ export default function VideoCall() {
           headers: { 'Authorization': `Bearer ${token}` },
         });
 
-        // Emitir a todos que la reunión terminó
-        socket?.emit('end-meeting', meetingId);
+        // Emitir evento ESPECÍFICO para cuando el anfitrión termina
+        socket?.emit('end-meeting-by-host', {
+          meetingId,
+          message: 'El anfitrión ha terminado la reunión'
+        });
+
       } catch (error) {
         console.error('[FRONT] Error finalizando reunión:', error);
       }
+    } else {
+      // Si no es el creador, solo emitir que se va
+      socket?.emit('user-left-meeting', { meetingId, userId: user?.id });
     }
 
     // FALTA: Limpiar los peers de voz y video antes de salir
-    // AGREGAR ESTO:
     if (peerVoice) {
       try {
         peerVoice.destroy();
