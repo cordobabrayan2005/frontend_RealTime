@@ -205,8 +205,8 @@ export default function VideoCall() {
       setTimeout(() => navigate('/realtime'), 1500);
     };
 
-    const handleMeetingEndedMessage = (message: string) => {
-      console.log('[FRONT] Reunión terminada (mensaje):', message);
+    const handleMeetingEnded = (message: string) => {
+      console.log('[FRONT] Reunión terminada:', message);
       cleanupMedia();
       setMeetingEnded(true);
       setModalMessage(message);
@@ -314,7 +314,7 @@ export default function VideoCall() {
     socket.on('connect', handleConnect);
     socket.on('receive-message', handleReceiveMessage);
     socket.on('participants-list', handleParticipantsList);
-    socket.on('meeting-ended', handleMeetingEndedMessage);
+    socket.on('meeting-ended', handleMeetingEnded);
     socket.on('user-joined', handleUserJoined);
     socket.on('user-left', handleUserLeft);
     socket.on('error', handleSocketError);
@@ -340,41 +340,6 @@ export default function VideoCall() {
     };
   }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate]);  // Corregido: Agregar audioStreamRef y videoStreamRef
 
-  // AGREGAR ESTE useEffect DESPUÉS DEL PRIMER useEffect DE SOCKETS
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleMeetingEndedByHost = (data: { message: string }) => {
-      console.log('[FRONT] Reunión terminada por el anfitrión (objeto):', data);
-
-      // Limpiar medios
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (videoStreamRef.current) {
-        videoStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-
-      // Cerrar todas las llamadas
-      peerCallsRef.current?.forEach(call => call.close());
-
-      // Mostrar mensaje y redirigir
-      setMeetingEnded(true);
-      setModalMessage(data.message || 'El anfitrión ha terminado la reunión');
-      setModalVisible(true);
-
-      setTimeout(() => {
-        navigate('/realtime');
-      }, 2000);
-    };
-
-    // IMPORTANTE: Usar un nombre de evento DIFERENTE
-    socket.on('meeting-ended-by-host', handleMeetingEndedByHost);
-
-    return () => {
-      socket.off('meeting-ended-by-host', handleMeetingEndedByHost);
-    };
-  }, [socket, navigate]);
 
   // ==================== MANEJO DE ESTADOS DE VIDEO REMOTOS ====================
   useEffect(() => {
