@@ -183,11 +183,8 @@ export function useVideocallController(): VideocallController {
       }
 
       remoteVideoRefs.current.clear();
-<<<<<<< HEAD
       videoPeersRef.current.clear();
       bumpRemoteStreamsVersion();
-=======
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
 
       try {
         peerVoice?.destroy();
@@ -259,15 +256,16 @@ export function useVideocallController(): VideocallController {
     };
 
     const handleUserLeft = (data: { userId: string }) => {
-<<<<<<< HEAD
-      remoteVideoRefs.current.delete(data.userId);
+      const userId = data?.userId;
+      if (!userId) return;
+      remoteVideoRefs.current.delete(userId);
+      Array.from(videoPeersRef.current).forEach((peerId) => {
+        if (peerId.startsWith(`${userId}_`)) {
+          videoPeersRef.current.delete(peerId);
+        }
+      });
       bumpRemoteStreamsVersion();
-      setParticipants((prev) => prev.filter((participant) => participant.id !== data.userId));
-=======
-      if (!data?.userId) return;
-      remoteVideoRefs.current.delete(data.userId);
-      removeRemoteParticipant(data.userId);
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
+      removeRemoteParticipant(userId);
     };
 
     const handleSocketError = (msg: string) => {
@@ -295,18 +293,18 @@ export function useVideocallController(): VideocallController {
         peerCall.close();
         peerCallsRef.current.delete(peerId);
       }
-<<<<<<< HEAD
+      const participantId = normalizePeerId(peerId);
       if (peerId.endsWith('_video')) {
-        const userId = peerId.split('_')[0];
-        remoteVideoRefs.current.delete(userId);
+        if (participantId) {
+          remoteVideoRefs.current.delete(participantId);
+        }
         videoPeersRef.current.delete(peerId);
         bumpRemoteStreamsVersion();
-=======
-      const participantId = normalizePeerId(peerId);
-      if (participantId) {
+      } else if (participantId) {
         remoteVideoRefs.current.delete(participantId);
+      }
+      if (participantId) {
         removeRemoteParticipant(participantId);
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
       }
     };
 
@@ -317,13 +315,10 @@ export function useVideocallController(): VideocallController {
 
     const handleVideoJoined = (data: { peers: string[] }) => {
       data.peers.forEach((peerId) => {
-<<<<<<< HEAD
         if (peerId.endsWith('_video')) {
           videoPeersRef.current.add(peerId);
         }
-=======
         addRemoteParticipant(createRemoteParticipant(peerId));
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
         if (cameraOn) {
           initiateCall(peerId);
         }
@@ -331,13 +326,10 @@ export function useVideocallController(): VideocallController {
     };
 
     const handlePeerJoinedVideo = (peerId: string) => {
-<<<<<<< HEAD
       if (peerId.endsWith('_video')) {
         videoPeersRef.current.add(peerId);
       }
-=======
       addRemoteParticipant(createRemoteParticipant(peerId));
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
       if (cameraOn) {
         initiateCall(peerId);
       }
@@ -428,11 +420,8 @@ export function useVideocallController(): VideocallController {
     peerCallsRef,
     peerVoice,
     peerVideo,
-<<<<<<< HEAD
     bumpRemoteStreamsVersion,
-=======
     localParticipant,
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
   ]);
 
   const toggleCamera = useCallback(() => {
@@ -537,6 +526,8 @@ export function useVideocallController(): VideocallController {
     }
 
     remoteVideoRefs.current.clear();
+    videoPeersRef.current.clear();
+    bumpRemoteStreamsVersion();
     setParticipants([localParticipant]);
     setShowChat(false);
     navigate('/realtime');
@@ -551,6 +542,7 @@ export function useVideocallController(): VideocallController {
     peerVoice,
     peerVideo,
     localParticipant,
+    bumpRemoteStreamsVersion,
     navigate,
   ]);
 

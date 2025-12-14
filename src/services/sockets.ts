@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-import { useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
-=======
 import { useEffect, useMemo, useState } from 'react';
-import io, { Socket } from 'socket.io-client';
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
+import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
 
 /**

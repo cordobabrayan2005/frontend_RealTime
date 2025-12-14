@@ -295,32 +295,20 @@ export function usePeer(
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
-<<<<<<< HEAD
-      callVideo.on('stream', (remoteStream) => {
-        console.log('[FRONT] Stream de video recibido de:', peerId);
-        const userId = peerId.split('_')[0];
-        remoteVideoRefs.current.set(userId, remoteStream);
-        bumpRemoteStreamsVersion();
-      });
-      callVideo.on('close', () => {
-        const userId = peerId.split('_')[0];
-        remoteVideoRefs.current.delete(userId);
-        bumpRemoteStreamsVersion();
-=======
-
       callVideo.on('stream', (remoteStream) => {
         const participantId = extractUserIdFromPeer(peerId);
         remoteVideoRefs.current.set(participantId, remoteStream);
+        bumpRemoteStreamsVersion();
       });
 
       callVideo.on('close', () => {
         const participantId = extractUserIdFromPeer(peerId);
         remoteVideoRefs.current.delete(participantId);
+        bumpRemoteStreamsVersion();
       });
 
       callVideo.on('error', (err: unknown) => {
         console.error('[FRONT] Error en llamada de video saliente:', err);
->>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
       });
     } else {
       console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
