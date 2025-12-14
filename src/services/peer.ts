@@ -475,3 +475,4 @@ export function usePeer(
     syncVideoTrack,
   };
 }
+export { usePeer } from '../features/videocall/services/peer';
