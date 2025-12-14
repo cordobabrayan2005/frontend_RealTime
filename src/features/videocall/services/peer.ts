@@ -434,7 +434,12 @@ export function usePeer(
       if (!peerId.endsWith('_video')) {
         return;
       }
-      const pc: RTCPeerConnection | undefined = call?.peerConnection;
+      const candidate = call && typeof call === 'object' && 'peerConnection' in call
+        ? call.peerConnection
+        : call;
+      const pc: RTCPeerConnection | undefined = candidate && typeof candidate.getSenders === 'function'
+        ? (candidate as RTCPeerConnection)
+        : undefined;
       if (!pc) {
         return;
       }

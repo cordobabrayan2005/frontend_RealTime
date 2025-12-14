@@ -468,12 +468,13 @@ export function useVideocallController(): VideocallController {
   useEffect(() => {
     const stream = cameraOn ? videoStreamRef.current : null;
     syncVideoTrack(stream ?? null);
-    videoPeersRef.current.forEach((peerId) => {
-      if (!peerCallsRef.current.has(peerId)) {
+
+    if (cameraOn && stream) {
+      videoPeersRef.current.forEach((peerId) => {
         initiateVideoCall(peerId);
-      }
-    });
-  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateVideoCall, videoStreamRef, peerCallsRef]);
+      });
+    }
+  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateVideoCall, videoStreamRef]);
 
   const toggleCamera = useCallback(() => {
     setCameraOn((prev) => !prev);
