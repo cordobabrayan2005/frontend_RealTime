@@ -114,38 +114,17 @@ export function usePeer(
   };
 
   const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
-    console.log('[FRONT] Creando elemento video oculto para peer:', peerId);  // Cambiar log
-    let video = document.querySelector(`video[data-peer="${peerId}"]`) as HTMLVideoElement | null;
-    if (!video) {
-      video = document.createElement('video');
-      video.setAttribute('data-peer', peerId);
-      video.autoplay = true;
-      video.setAttribute('playsinline', 'true');
-      video.volume = 1;
-      video.muted = false;  // No mutear para reproducir audio
-      video.style.position = 'absolute';
-      video.style.left = '-9999px';
-      video.style.top = '-9999px';
-      video.style.width = '1px';
-      video.style.height = '1px';
-      video.style.opacity = '0';
-      document.body.appendChild(video);
+    let audio = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.setAttribute('data-peer', peerId);
+      audio.autoplay = true;
+      audio.setAttribute('playsinline', 'true');
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
     }
-    video.srcObject = stream;
-    console.log('[FRONT] Tracks de audio en stream:', stream.getAudioTracks().length);
-    if (stream.getAudioTracks().length > 0) {
-      video.play().catch((err) => {
-        console.error('[FRONT] Autoplay video falló para peer:', peerId, err);
-        // Listener de interacción para reproducir
-        const resume = () => {
-          video?.play().catch(e => console.error('Aún fallando:', e));
-          document.removeEventListener('click', resume);
-        };
-        document.addEventListener('click', resume, { once: true });
-      });
-    } else {
-      console.warn('[FRONT] No hay tracks de audio en stream para peer:', peerId);
-    }
+    audio.srcObject = stream;
+    audio.play().catch((err) => console.error('[FRONT] Autoplay audio:', err));
   };
 
   const callPeer = (peerInstance: Peer | null, peerId: string, stream?: MediaStream): MediaConnection | null => {
@@ -175,7 +154,7 @@ export function usePeer(
       fallbackBase,
       import.meta.env.VITE_PEERJS_HOST_VOICE,
       {
-        path: import.meta.env.VITE_PEERJS_PATH_VOICE, //regresarlo
+        path: import.meta.env.VITE_PEERJS_PATH_VOICE,
         port: import.meta.env.VITE_PEERJS_PORT_VOICE,
         secure: import.meta.env.VITE_PEERJS_SECURE_VOICE,
       }
@@ -481,4 +460,3 @@ export function usePeer(
     syncVideoTrack,
   };
 }
-export { usePeer } from '../features/videocall/services/peer';
