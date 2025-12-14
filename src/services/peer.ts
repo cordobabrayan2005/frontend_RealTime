@@ -152,6 +152,15 @@ export function usePeer(
 
     newPeerVoice.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de voz de:', call.peer);
+      const existingCall = peerCallsRef.current.get(call.peer);
+      if (existingCall && existingCall !== call) {
+        try {
+          existingCall.close();
+        } catch (err) {
+          console.warn('[FRONT] Error cerrando llamada de voz previa:', err);
+        }
+        peerCallsRef.current.delete(call.peer);
+      }
       if (audioStreamRef.current && micOn) {
         call.answer(audioStreamRef.current);
         call.on('stream', (remoteStream) => {
@@ -225,6 +234,15 @@ export function usePeer(
 
     newPeerVideo.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de video de:', call.peer);
+      const existingCall = peerCallsRef.current.get(call.peer);
+      if (existingCall && existingCall !== call) {
+        try {
+          existingCall.close();
+        } catch (err) {
+          console.warn('[FRONT] Error cerrando llamada de video previa:', err);
+        }
+        peerCallsRef.current.delete(call.peer);
+      }
       if (videoStreamRef.current && cameraOn) {
         call.answer(videoStreamRef.current);
       } else {
@@ -265,6 +283,15 @@ export function usePeer(
   const initiateCall = async (peerId: string) => {
     if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
+      const existingCall = peerCallsRef.current.get(peerId);
+      if (existingCall) {
+        try {
+          existingCall.close();
+        } catch (err) {
+          console.warn('[FRONT] Error cerrando llamada de voz saliente previa:', err);
+        }
+        peerCallsRef.current.delete(peerId);
+      }
       const callVoice = peerVoice.call(peerId, audioStreamRef.current);
       peerCallsRef.current.set(peerId, callVoice);
 
@@ -294,6 +321,15 @@ export function usePeer(
       };
     } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
+      const existingCall = peerCallsRef.current.get(peerId);
+      if (existingCall) {
+        try {
+          existingCall.close();
+        } catch (err) {
+          console.warn('[FRONT] Error cerrando llamada de video saliente previa:', err);
+        }
+        peerCallsRef.current.delete(peerId);
+      }
       const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
       callVideo.on('stream', (remoteStream) => {
