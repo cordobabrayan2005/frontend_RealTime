@@ -169,7 +169,7 @@ export function usePeer(
       fallbackBase,
       import.meta.env.VITE_PEERJS_HOST_VOICE,
       {
-        path: '/peerjs',  // Agregado para voz
+        path: import.meta.env.VITE_PEERJS_PATH_VOICE,
         port: import.meta.env.VITE_PEERJS_PORT_VOICE,
         secure: import.meta.env.VITE_PEERJS_SECURE_VOICE,
       }
