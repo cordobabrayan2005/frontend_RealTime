@@ -65,6 +65,7 @@ export function useVideocallController(): VideocallController {
     setCameraOn,
     micOn,
     setMicOn,
+    videoReadyVersion,
   } = useMedia();
 
   const {
@@ -424,17 +425,22 @@ export function useVideocallController(): VideocallController {
     localParticipant,
   ]);
 
-  const toggleCamera = useCallback(() => {
-    setCameraOn((prev) => {
-      const next = !prev;
-      if (!prev && next) {
-        videoPeersRef.current.forEach((peerId) => {
-          initiateCall(peerId);
-        });
-      }
-      return next;
+  useEffect(() => {
+    if (!cameraOn) {
+      return;
+    }
+    if (!videoStreamRef.current) {
+      return;
+    }
+
+    videoPeersRef.current.forEach((peerId) => {
+      initiateCall(peerId);
     });
-  }, [setCameraOn, initiateCall]);
+  }, [cameraOn, videoReadyVersion, initiateCall, videoStreamRef]);
+
+  const toggleCamera = useCallback(() => {
+    setCameraOn((prev) => !prev);
+  }, [setCameraOn]);
 
   const toggleMic = useCallback(() => {
     setMicOn((prev) => {
