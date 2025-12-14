@@ -177,10 +177,14 @@ export function usePeer(
         }
         peerCallsRef.current.delete(call.peer);
       }
-      const outboundStream = audioStreamRef.current ?? new MediaStream();
-      call.answer(outboundStream);
+      const outboundStream = audioStreamRef.current && micOn ? audioStreamRef.current : undefined;
+      if (outboundStream) {
+        call.answer(outboundStream);
+      } else {
+        call.answer();
+      }
 
-      call.on('stream', (remoteStream) => {
+      call.on('stream', (remoteStream: MediaStream) => {
         console.log('[FRONT] Stream de voz recibido de:', call.peer);
         const audio = document.createElement('audio');
         audio.srcObject = remoteStream;
@@ -190,21 +194,8 @@ export function usePeer(
         audio.play().catch(err => console.error('Autoplay audio:', err));
       });
 
-      try {
-        const dataChannel = call.peerConnection?.createDataChannel('mute-channel');
-        if (dataChannel) {
-          dataChannel.onopen = () => {
-            dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
-          };
-          attachMuteChannel(dataChannel, call.peer);
-          call.dataChannel = dataChannel;
-        }
-      } catch (error) {
-        console.warn('[FRONT] Error creando DataChannel de mute:', error);
-      }
-
       if (call.peerConnection) {
-        call.peerConnection.ondatachannel = (event) => {
+        call.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
           attachMuteChannel(event.channel, call.peer);
         };
       }
@@ -268,7 +259,7 @@ export function usePeer(
         call.answer();
       }
 
-      call.on('stream', (remoteStream) => {
+      call.on('stream', (remoteStream: MediaStream) => {
         console.log('[FRONT] Stream de video recibido de:', call.peer);
         const userId = extractUserIdFromPeer(call.peer);
         remoteVideoRefs.current.set(userId, remoteStream);
@@ -311,12 +302,14 @@ export function usePeer(
         }
         peerCallsRef.current.delete(peerId);
       }
-      const outboundStream = audioStreamRef.current ?? new MediaStream();
-      const callVoice = peerVoice.call(peerId, outboundStream);
+      const outboundStream = audioStreamRef.current && micOn ? audioStreamRef.current : undefined;
+      const callVoice = outboundStream
+        ? peerVoice.call(peerId, outboundStream)
+        : (peerVoice as unknown as { call: (id: string) => any }).call(peerId);
       peerCallsRef.current.set(peerId, callVoice);
 
       // Manejar DataChannel en llamada iniciada
-      callVoice.on('stream', (remoteStream) => {
+      callVoice.on('stream', (remoteStream: MediaStream) => {
         console.log('[FRONT] Stream de voz recibido de:', peerId);
         const audio = document.createElement('audio');
         audio.srcObject = remoteStream;
@@ -327,9 +320,21 @@ export function usePeer(
       });
 
       // Escuchar DataChannel
-      callVoice.peerConnection.ondatachannel = (event) => {
+      callVoice.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
         attachMuteChannel(event.channel, peerId);
       };
+      try {
+        const dataChannel = callVoice.peerConnection?.createDataChannel('mute-channel');
+        if (dataChannel) {
+          dataChannel.onopen = () => {
+            dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
+          };
+          attachMuteChannel(dataChannel, peerId);
+          callVoice.dataChannel = dataChannel;
+        }
+      } catch (error) {
+        console.warn('[FRONT] Error creando DataChannel de mute (saliente):', error);
+      }
     } else if (peerId.endsWith('_video') && peerVideo) {
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const existingCall = peerCallsRef.current.get(peerId);
@@ -341,11 +346,12 @@ export function usePeer(
         }
         peerCallsRef.current.delete(peerId);
       }
-      const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : null;
-      const outboundStream = streamToSend ?? new MediaStream();  // fallback vacío cuando la cámara está apagada
-      const callVideo = peerVideo.call(peerId, outboundStream);
+      const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : undefined;
+      const callVideo = streamToSend
+        ? peerVideo.call(peerId, streamToSend)
+        : (peerVideo as unknown as { call: (id: string) => any }).call(peerId);
       peerCallsRef.current.set(peerId, callVideo);
-      callVideo.on('stream', (remoteStream) => {
+      callVideo.on('stream', (remoteStream: MediaStream) => {
         const participantId = extractUserIdFromPeer(peerId);
         remoteVideoRefs.current.set(participantId, remoteStream);
         bumpRemoteStreamsVersion();
