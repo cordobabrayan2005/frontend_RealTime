@@ -80,7 +80,8 @@ export function useVideocallController(): VideocallController {
     peerVoice,
     peerVideo,
     peerCallsRef,
-    initiateCall,
+    initiateVoiceCall,
+    initiateVideoCall,
     sendMuteToPeers,
     syncVideoTrack,
   } = usePeer(
@@ -299,14 +300,14 @@ export function useVideocallController(): VideocallController {
     const handleVoiceJoined = (data: { peers: string[] }) => {
       data.peers.forEach((peerId) => {
         if (micOn) {
-          initiateCall(peerId);
+          initiateVoiceCall(peerId);
         }
       });
     };
 
     const handlePeerJoined = (peerId: string) => {
       if (micOn) {
-        initiateCall(peerId);
+        initiateVoiceCall(peerId);
       }
     };
 
@@ -341,7 +342,7 @@ export function useVideocallController(): VideocallController {
         registerVideoPeer(peerId);
         addRemoteParticipant(createRemoteParticipant(peerId));
         if (cameraOn) {
-          initiateCall(peerId);
+          initiateVideoCall(peerId);
         }
       });
     };
@@ -350,7 +351,7 @@ export function useVideocallController(): VideocallController {
       registerVideoPeer(peerId);
       addRemoteParticipant(createRemoteParticipant(peerId));
       if (cameraOn) {
-        initiateCall(peerId);
+        initiateVideoCall(peerId);
       }
     };
 
@@ -360,7 +361,7 @@ export function useVideocallController(): VideocallController {
         .map(({ odiserId, displayName }) => {
           registerVideoPeer(odiserId);
           if (cameraOn) {
-            initiateCall(odiserId);
+            initiateVideoCall(odiserId);
           }
           return createRemoteParticipant(odiserId, displayName);
         })
@@ -372,7 +373,7 @@ export function useVideocallController(): VideocallController {
       registerVideoPeer(payload.odiserId);
       addRemoteParticipant(createRemoteParticipant(payload.odiserId, payload.displayName));
       if (cameraOn && payload.odiserId && !payload.odiserId.startsWith(`${user.id}_`)) {
-        initiateCall(payload.odiserId);
+        initiateVideoCall(payload.odiserId);
       }
     };
 
@@ -444,7 +445,8 @@ export function useVideocallController(): VideocallController {
     cameraOn,
     audioStreamRef,
     videoStreamRef,
-    initiateCall,
+    initiateVoiceCall,
+    initiateVideoCall,
     navigate,
     peerCallsRef,
     peerVoice,
@@ -459,11 +461,11 @@ export function useVideocallController(): VideocallController {
     if (cameraOn) {
       videoPeersRef.current.forEach((peerId) => {
         if (!peerCallsRef.current.has(peerId)) {
-          initiateCall(peerId);
+          initiateVideoCall(peerId);
         }
       });
     }
-  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateCall, videoStreamRef, peerCallsRef]);
+  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateVideoCall, videoStreamRef, peerCallsRef]);
 
   const toggleCamera = useCallback(() => {
     setCameraOn((prev) => !prev);

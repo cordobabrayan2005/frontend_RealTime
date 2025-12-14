@@ -206,7 +206,11 @@ export function usePeer(
         }
         peerCallsRef.current.delete(call.peer);
       }
-      const outboundStream = audioStreamRef.current ?? undefined;
+      if (!audioStreamRef.current) {
+        console.log('[FRONT] Postergando llamada de voz, stream local no disponible');
+        return;
+      }
+      const outboundStream = audioStreamRef.current;
       answerPeerCall(call, outboundStream);
 
       call.on('stream', (remoteStream: MediaStream) => {
@@ -232,7 +236,13 @@ export function usePeer(
           attachMuteChannel(event.channel, call.peer);
         };
       }
-      call.on('close', () => console.log('[FRONT] Llamada de voz cerrada'));
+      call.on('close', () => {
+        console.log('[FRONT] Llamada de voz cerrada');
+        const audio = document.querySelector(`audio[data-peer="${call.peer}"]`);
+        if (audio) {
+          audio.remove();
+        }
+      });
       call.on('error', (err) => console.error('[FRONT] Error en llamada de voz:', err));
       peerCallsRef.current.set(call.peer, call);
     });
@@ -323,84 +333,100 @@ export function usePeer(
   }, [meetingId, user?.id, videoSocket, videoPeerConfig]);  // Sin cameraOn
 
   // ==================== INICIAR LLAMADAS ====================
-  const initiateCall = async (peerId: string) => {
-    if (peerId.endsWith('_voice') && peerVoice) {
-      console.log('[FRONT] Iniciando llamada de voz a:', peerId);
-      const existingCall = peerCallsRef.current.get(peerId);
-      if (existingCall) {
-        try {
-          existingCall.close();
-        } catch (err) {
-          console.warn('[FRONT] Error cerrando llamada de voz saliente previa:', err);
-        }
-        peerCallsRef.current.delete(peerId);
-      }
-      const outboundStream = audioStreamRef.current ?? undefined;
-      const callVoice = callPeer(peerVoice, peerId, outboundStream);
-      if (!callVoice) {
-        console.warn('[FRONT] No se pudo iniciar la llamada de voz, instancia Peer inválida');
-        return;
-      }
-      peerCallsRef.current.set(peerId, callVoice);
-
-      // Manejar DataChannel en llamada iniciada
-      callVoice.on('stream', (remoteStream: MediaStream) => {
-        console.log('[FRONT] Stream de voz recibido de:', peerId);
-        ensureRemoteAudioElement(peerId, remoteStream);
-      });
-
-      // Escuchar DataChannel
-      callVoice.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
-        attachMuteChannel(event.channel, peerId);
-      };
-      try {
-        const dataChannel = callVoice.peerConnection?.createDataChannel('mute-channel');
-        if (dataChannel) {
-          dataChannel.onopen = () => {
-            dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
-          };
-          attachMuteChannel(dataChannel, peerId);
-          callVoice.dataChannel = dataChannel;
-        }
-      } catch (error) {
-        console.warn('[FRONT] Error creando DataChannel de mute (saliente):', error);
-      }
-    } else if (peerId.endsWith('_video') && peerVideo) {
-      console.log('[FRONT] Iniciando llamada de video a:', peerId);
-      const existingCall = peerCallsRef.current.get(peerId);
-      if (existingCall) {
-        try {
-          existingCall.close();
-        } catch (err) {
-          console.warn('[FRONT] Error cerrando llamada de video saliente previa:', err);
-        }
-        peerCallsRef.current.delete(peerId);
-      }
-      const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : undefined;
-      const callVideo = callPeer(peerVideo, peerId, streamToSend);
-      if (!callVideo) {
-        console.warn('[FRONT] No se pudo iniciar la llamada de video, instancia Peer inválida');
-        return;
-      }
-      peerCallsRef.current.set(peerId, callVideo);
-      callVideo.on('stream', (remoteStream: MediaStream) => {
-        const participantId = extractUserIdFromPeer(peerId);
-        remoteVideoRefs.current.set(participantId, remoteStream);
-        bumpRemoteStreamsVersion();
-      });
-
-      callVideo.on('close', () => {
-        const participantId = extractUserIdFromPeer(peerId);
-        remoteVideoRefs.current.delete(participantId);
-        bumpRemoteStreamsVersion();
-      });
-
-      callVideo.on('error', (err: unknown) => {
-        console.error('[FRONT] Error en llamada de video saliente:', err);
-      });
-    } else {
-      console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
+  const initiateVoiceCall = async (peerId: string) => {
+    if (!peerVoice || !peerId.endsWith('_voice')) {
+      return;
     }
+    console.log('[FRONT] Iniciando llamada de voz a:', peerId);
+    const existingCall = peerCallsRef.current.get(peerId);
+    if (existingCall) {
+      try {
+        existingCall.close();
+      } catch (err) {
+        console.warn('[FRONT] Error cerrando llamada de voz saliente previa:', err);
+      }
+      peerCallsRef.current.delete(peerId);
+    }
+    const outboundStream = audioStreamRef.current ?? undefined;
+    const callVoice = callPeer(peerVoice, peerId, outboundStream);
+    if (!callVoice) {
+      console.warn('[FRONT] No se pudo iniciar la llamada de voz, instancia Peer inválida');
+      return;
+    }
+    peerCallsRef.current.set(peerId, callVoice);
+
+    // Manejar DataChannel en llamada iniciada
+    callVoice.on('stream', (remoteStream: MediaStream) => {
+      console.log('[FRONT] Stream de voz recibido de:', peerId);
+      ensureRemoteAudioElement(peerId, remoteStream);
+    });
+
+    // Escuchar DataChannel
+    callVoice.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
+      attachMuteChannel(event.channel, peerId);
+    };
+    try {
+      const dataChannel = callVoice.peerConnection?.createDataChannel('mute-channel');
+      if (dataChannel) {
+        dataChannel.onopen = () => {
+          dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
+        };
+        attachMuteChannel(dataChannel, peerId);
+        callVoice.dataChannel = dataChannel;
+      }
+    } catch (error) {
+      console.warn('[FRONT] Error creando DataChannel de mute (saliente):', error);
+    }
+
+    callVoice.on('close', () => {
+      console.log('[FRONT] Llamada de voz cerrada (saliente)');
+      const audio = document.querySelector(`audio[data-peer="${peerId}"]`);
+      if (audio) {
+        audio.remove();
+      }
+    });
+  };
+
+  const initiateVideoCall = async (peerId: string) => {
+    if (!peerVideo || !peerId.endsWith('_video')) {
+      return;
+    }
+    console.log('[FRONT] Iniciando llamada de video a:', peerId);
+    const existingCall = peerCallsRef.current.get(peerId);
+    if (existingCall) {
+      try {
+        existingCall.close();
+      } catch (err) {
+        console.warn('[FRONT] Error cerrando llamada de video saliente previa:', err);
+      }
+      peerCallsRef.current.delete(peerId);
+    }
+    const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : undefined;
+    if (!streamToSend) {
+      console.log('[FRONT] Postergando llamada de video, stream local no disponible');
+      return;
+    }
+    const callVideo = callPeer(peerVideo, peerId, streamToSend);
+    if (!callVideo) {
+      console.warn('[FRONT] No se pudo iniciar la llamada de video, instancia Peer inválida');
+      return;
+    }
+    peerCallsRef.current.set(peerId, callVideo);
+    callVideo.on('stream', (remoteStream: MediaStream) => {
+      const participantId = extractUserIdFromPeer(peerId);
+      remoteVideoRefs.current.set(participantId, remoteStream);
+      bumpRemoteStreamsVersion();
+    });
+
+    callVideo.on('close', () => {
+      const participantId = extractUserIdFromPeer(peerId);
+      remoteVideoRefs.current.delete(participantId);
+      bumpRemoteStreamsVersion();
+    });
+
+    callVideo.on('error', (err: unknown) => {
+      console.error('[FRONT] Error en llamada de video saliente:', err);
+    });
   };
 
   const syncVideoTrack = useCallback((stream: MediaStream | null) => {
@@ -455,7 +481,8 @@ export function usePeer(
     peerVideo,
     peerStatus,
     peerCallsRef,
-    initiateCall,
+    initiateVoiceCall,
+    initiateVideoCall,
     sendMuteToPeers,
     syncVideoTrack,
   };
