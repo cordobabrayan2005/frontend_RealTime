@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Peer from 'peerjs';
 import { useAuthStore } from '../stores/authStore';
 
@@ -229,7 +229,12 @@ export function usePeer(
     newPeerVideo.on('open', (id) => {
       console.log('[FRONT] ✅ Peer video conectado:', id);
       setPeerStatus('connected');
-      videoSocket.emit('join-video-room', { meetingId, peerId: newPeerVideo.id, userId: user.id });
+      videoSocket.emit('join-video-room', {
+        meetingId,
+        peerId: newPeerVideo.id,
+        userId: user.id,
+        displayName: user.name || user.email || user.id,
+      });
     });
 
     newPeerVideo.on('call', (call) => {
@@ -319,7 +324,7 @@ export function usePeer(
           }
         };
       };
-    } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {
+    } else if (peerId.endsWith('_video') && peerVideo) {
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const existingCall = peerCallsRef.current.get(peerId);
       if (existingCall) {
@@ -330,7 +335,9 @@ export function usePeer(
         }
         peerCallsRef.current.delete(peerId);
       }
-      const callVideo = peerVideo.call(peerId, videoStreamRef.current);
+      const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : null;
+      const outboundStream = streamToSend ?? new MediaStream();  // fallback vacío cuando la cámara está apagada
+      const callVideo = peerVideo.call(peerId, outboundStream);
       peerCallsRef.current.set(peerId, callVideo);
       callVideo.on('stream', (remoteStream) => {
         const participantId = extractUserIdFromPeer(peerId);
@@ -352,6 +359,43 @@ export function usePeer(
     }
   };
 
+  const syncVideoTrack = useCallback((stream: MediaStream | null) => {
+    const track = stream?.getVideoTracks()[0] ?? null;
+    peerCallsRef.current.forEach((call, peerId) => {
+      if (!peerId.endsWith('_video')) {
+        return;
+      }
+      const pc: RTCPeerConnection | undefined = call?.peerConnection;
+      if (!pc) {
+        return;
+      }
+      const senders = pc.getSenders().filter((sender) => sender.track?.kind === 'video');
+      if (track) {
+        if (senders.length > 0) {
+          senders.forEach((sender) => {
+            sender.replaceTrack(track).catch((err) => {
+              console.warn('[FRONT] Error al reemplazar track de video:', err);
+            });
+          });
+        } else {
+          try {
+            if (stream) {
+              pc.addTrack(track, stream);
+            }
+          } catch (err) {
+            console.warn('[FRONT] Error agregando track de video:', err);
+          }
+        }
+      } else {
+        senders.forEach((sender) => {
+          sender.replaceTrack(null).catch((err) => {
+            console.warn('[FRONT] Error al detener track de video:', err);
+          });
+        });
+      }
+    });
+  }, []);
+
   // Agregar función para enviar mute a todos los peers
   const sendMuteToPeers = (muted: boolean) => {
     peerCallsRef.current.forEach((call) => {
@@ -368,6 +412,7 @@ export function usePeer(
     peerStatus,
     peerCallsRef,
     initiateCall,
-    sendMuteToPeers
+    sendMuteToPeers,
+    syncVideoTrack,
   };
 }

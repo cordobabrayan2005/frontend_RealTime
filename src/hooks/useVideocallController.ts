@@ -82,6 +82,7 @@ export function useVideocallController(): VideocallController {
     peerCallsRef,
     initiateCall,
     sendMuteToPeers,
+    syncVideoTrack,
   } = usePeer(
     meetingId,
     voiceSocket,
@@ -453,17 +454,16 @@ export function useVideocallController(): VideocallController {
   ]);
 
   useEffect(() => {
-    if (!cameraOn) {
-      return;
+    const stream = cameraOn ? videoStreamRef.current : null;
+    syncVideoTrack(stream ?? null);
+    if (cameraOn) {
+      videoPeersRef.current.forEach((peerId) => {
+        if (!peerCallsRef.current.has(peerId)) {
+          initiateCall(peerId);
+        }
+      });
     }
-    if (!videoStreamRef.current) {
-      return;
-    }
-
-    videoPeersRef.current.forEach((peerId) => {
-      initiateCall(peerId);
-    });
-  }, [cameraOn, videoReadyVersion, initiateCall, videoStreamRef]);
+  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateCall, videoStreamRef, peerCallsRef]);
 
   const toggleCamera = useCallback(() => {
     setCameraOn((prev) => !prev);
