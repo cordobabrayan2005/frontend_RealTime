@@ -227,16 +227,17 @@ export function usePeer(
       console.log('[FRONT] Contestando llamada de video de:', call.peer);
       if (videoStreamRef.current && cameraOn) {
         call.answer(videoStreamRef.current);
-        call.on('stream', (remoteStream) => {
-          console.log('[FRONT] Stream de video recibido de:', call.peer);
-          const userId = extractUserIdFromPeer(call.peer);
-          remoteVideoRefs.current.set(userId, remoteStream);
-          bumpRemoteStreamsVersion();
-        });
       } else {
-        console.log('[FRONT] Rechazando llamada de video - cámara apagada');
-        call.close();
+        call.answer();
       }
+
+      call.on('stream', (remoteStream) => {
+        console.log('[FRONT] Stream de video recibido de:', call.peer);
+        const userId = extractUserIdFromPeer(call.peer);
+        remoteVideoRefs.current.set(userId, remoteStream);
+        bumpRemoteStreamsVersion();
+      });
+
       call.on('close', () => {
         console.log('[FRONT] Llamada de video cerrada');
         const userId = extractUserIdFromPeer(call.peer);
