@@ -2,20 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import Peer from 'peerjs';
 import { useAuthStore } from '../stores/authStore';
 
-const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
-  if (value === undefined) return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'true') return true;
-  if (normalized === 'false') return false;
-  return fallback;
-};
-
-const parsePort = (value: string | undefined, fallback: number): number => {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
 export function usePeer(
   meetingId: string | undefined,
   voiceSocket: any,
@@ -32,14 +18,8 @@ export function usePeer(
   const [peerStatus, setPeerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const peerCallsRef = useRef<Map<string, any>>(new Map());
 
-  const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || import.meta.env.VITE_PEERJS_HOST || 'realtimevoicebackend.onrender.com';
-  const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || import.meta.env.VITE_PEERJS_HOST || 'realtimevideocambackend.onrender.com';
-  const PEERJS_PATH_VOICE = import.meta.env.VITE_PEERJS_PATH_VOICE || import.meta.env.VITE_PEERJS_PATH || '/peerjs';
-  const PEERJS_PATH_VIDEO = import.meta.env.VITE_PEERJS_PATH_VIDEO || import.meta.env.VITE_PEERJS_PATH || '/peerjs';
-  const PEERJS_SECURE_VOICE = parseBoolean(import.meta.env.VITE_PEERJS_SECURE_VOICE || import.meta.env.VITE_PEERJS_SECURE, true);
-  const PEERJS_SECURE_VIDEO = parseBoolean(import.meta.env.VITE_PEERJS_SECURE_VIDEO || import.meta.env.VITE_PEERJS_SECURE, true);
-  const PEERJS_PORT_VOICE = parsePort(import.meta.env.VITE_PEERJS_PORT_VOICE || import.meta.env.VITE_PEERJS_PORT, PEERJS_SECURE_VOICE ? 443 : 80);
-  const PEERJS_PORT_VIDEO = parsePort(import.meta.env.VITE_PEERJS_PORT_VIDEO || import.meta.env.VITE_PEERJS_PORT, PEERJS_SECURE_VIDEO ? 443 : 80);
+  const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
+  const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
   // ==================== PEER DE VOZ (PERSISTENTE) ====================
   useEffect(() => {
@@ -48,9 +28,9 @@ export function usePeer(
     console.log('[FRONT] Inicializando Peer de voz...');
     const newPeerVoice = new Peer(`${user.id}_voice`, {
       host: PEERJS_HOST_VOICE,
-      path: PEERJS_PATH_VOICE,
-      secure: PEERJS_SECURE_VOICE,
-      port: PEERJS_PORT_VOICE,
+      path: '/',
+      secure: true,
+      port: 443,
       debug: 1,
       config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
@@ -121,9 +101,9 @@ export function usePeer(
     console.log('[FRONT] Inicializando Peer de video...');
     const newPeerVideo = new Peer(`${user.id}_video`, {
       host: PEERJS_HOST_VIDEO,
-      path: PEERJS_PATH_VIDEO,
-      secure: PEERJS_SECURE_VIDEO,
-      port: PEERJS_PORT_VIDEO,
+      path: '/',
+      secure: true,
+      port: 443,
       debug: 1,
       config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });

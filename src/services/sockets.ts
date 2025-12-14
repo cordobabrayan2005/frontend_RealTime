@@ -12,14 +12,9 @@ export function useSockets(meetingId: string | undefined) {
   const [videoSocket, setVideoSocket] = useState<Socket | null>(null);  // Nuevo para video
   const [isCreator, setIsCreator] = useState(false);
 
-  const normalizeBase = (value: string, fallback: string) => {
-    const src = value && value.trim() ? value.trim() : fallback;
-    return src.replace(/\/+$/, '');
-  };
-
-  const CHAT_BACKEND_URL = normalizeBase(import.meta.env.VITE_CHAT_BACKEND_URL, 'https://realtimechatbackend-87nm.onrender.com');
-  const VOICE_BACKEND_URL = normalizeBase(import.meta.env.VITE_VOICE_BACKEND_URL, 'https://realtimevoicebackend.onrender.com');
-  const VIDEO_BACKEND_URL = normalizeBase(import.meta.env.VITE_VIDEO_BACKEND_URL, 'https://realtimevideocambackend.onrender.com');  // Nuevo
+  const CHAT_BACKEND_URL = import.meta.env.VITE_CHAT_BACKEND_URL || 'https://realtimechatbackend-87nm.onrender.com';
+  const VOICE_BACKEND_URL = import.meta.env.VITE_VOICE_BACKEND_URL || 'https://realtimevoicebackend.onrender.com';
+  const VIDEO_BACKEND_URL = import.meta.env.VITE_VIDEO_BACKEND_URL || 'https://realtimevideocambackend.onrender.com';  // Nuevo
 
   useEffect(() => {
     if (!meetingId || !token || !user) return;
