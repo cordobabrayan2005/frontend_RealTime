@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore } from '../../../stores/authStore';
 import { useMedia } from '../services/media';
 import { usePeer } from '../services/peer';
 import { useSockets } from '../services/sockets';
 import { setupWebRTCHandlers } from '../services/webrtc';
-import { Participant, ChatMessage } from '../components/videocall/types';
+import { Participant, ChatMessage } from '../types';
 
 interface VideocallControllerHandlers {
   toggleCamera: () => void;
@@ -80,7 +80,8 @@ export function useVideocallController(): VideocallController {
     peerVoice,
     peerVideo,
     peerCallsRef,
-    initiateCall,
+    initiateVoiceCall,
+    initiateVideoCall,
     sendMuteToPeers,
     syncVideoTrack,
   } = usePeer(
@@ -298,16 +299,12 @@ export function useVideocallController(): VideocallController {
 
     const handleVoiceJoined = (data: { peers: string[] }) => {
       data.peers.forEach((peerId) => {
-        if (micOn) {
-          initiateCall(peerId);
-        }
+        initiateVoiceCall(peerId);
       });
     };
 
     const handlePeerJoined = (peerId: string) => {
-      if (micOn) {
-        initiateCall(peerId);
-      }
+      initiateVoiceCall(peerId);
     };
 
     const handlePeerDisconnected = (peerId: string) => {
@@ -340,18 +337,14 @@ export function useVideocallController(): VideocallController {
       data.peers.forEach((peerId) => {
         registerVideoPeer(peerId);
         addRemoteParticipant(createRemoteParticipant(peerId));
-        if (cameraOn) {
-          initiateCall(peerId);
-        }
+        initiateVideoCall(peerId);
       });
     };
 
     const handlePeerJoinedVideo = (peerId: string) => {
       registerVideoPeer(peerId);
       addRemoteParticipant(createRemoteParticipant(peerId));
-      if (cameraOn) {
-        initiateCall(peerId);
-      }
+      initiateVideoCall(peerId);
     };
 
     const handleRoomParticipants = (payload: { participants: Array<{ odiserId: string; displayName?: string }> }) => {
@@ -359,9 +352,7 @@ export function useVideocallController(): VideocallController {
       const remote = payload.participants
         .map(({ odiserId, displayName }) => {
           registerVideoPeer(odiserId);
-          if (cameraOn) {
-            initiateCall(odiserId);
-          }
+          initiateVideoCall(odiserId);
           return createRemoteParticipant(odiserId, displayName);
         })
         .filter(Boolean) as Participant[];
@@ -371,8 +362,8 @@ export function useVideocallController(): VideocallController {
     const handleVideoParticipantJoined = (payload: { odiserId: string; displayName?: string }) => {
       registerVideoPeer(payload.odiserId);
       addRemoteParticipant(createRemoteParticipant(payload.odiserId, payload.displayName));
-      if (cameraOn && payload.odiserId && !payload.odiserId.startsWith(`${user.id}_`)) {
-        initiateCall(payload.odiserId);
+      if (payload.odiserId && !payload.odiserId.startsWith(`${user.id}_`)) {
+        initiateVideoCall(payload.odiserId);
       }
     };
 
@@ -432,6 +423,28 @@ export function useVideocallController(): VideocallController {
     const cleanupWebRTC = setupWebRTCHandlers(voiceSocket, peerCallsRef, audioStreamRef);
 
     return () => {
+      socket.off('connect', handleConnect);
+      socket.off('receive-message', handleReceiveMessage);
+      socket.off('participants-list', handleParticipantsList);
+      socket.off('meeting-ended', handleMeetingEnded);
+      socket.off('user-joined', handleUserJoined);
+      socket.off('user-left', handleUserLeft);
+      socket.off('error', handleSocketError);
+
+      voiceSocket.off('voice-joined', handleVoiceJoined);
+      voiceSocket.off('peer-joined', handlePeerJoined);
+      voiceSocket.off('peer-disconnected', handlePeerDisconnected);
+      voiceSocket.off('voice-error', handleVoiceError);
+      voiceSocket.off('force-disconnect', handleForceDisconnect);
+
+      videoSocket.off('video-joined', handleVideoJoined);
+      videoSocket.off('peer-joined', handlePeerJoinedVideo);
+      videoSocket.off('peer-disconnected', handlePeerDisconnected);
+      videoSocket.off('video-error', handleVideoError);
+      videoSocket.off('force-disconnect', handleForceDisconnect);
+      videoSocket.off('room-participants', handleRoomParticipants);
+      videoSocket.off('participant-joined', handleVideoParticipantJoined);
+
       cleanupWebRTC();
     };
   }, [
@@ -440,11 +453,10 @@ export function useVideocallController(): VideocallController {
     videoSocket,
     user,
     meetingId,
-    micOn,
-    cameraOn,
     audioStreamRef,
     videoStreamRef,
-    initiateCall,
+    initiateVoiceCall,
+    initiateVideoCall,
     navigate,
     peerCallsRef,
     peerVoice,
@@ -456,14 +468,12 @@ export function useVideocallController(): VideocallController {
   useEffect(() => {
     const stream = cameraOn ? videoStreamRef.current : null;
     syncVideoTrack(stream ?? null);
-    if (cameraOn) {
-      videoPeersRef.current.forEach((peerId) => {
-        if (!peerCallsRef.current.has(peerId)) {
-          initiateCall(peerId);
-        }
-      });
-    }
-  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateCall, videoStreamRef, peerCallsRef]);
+    videoPeersRef.current.forEach((peerId) => {
+      if (!peerCallsRef.current.has(peerId)) {
+        initiateVideoCall(peerId);
+      }
+    });
+  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateVideoCall, videoStreamRef, peerCallsRef]);
 
   const toggleCamera = useCallback(() => {
     setCameraOn((prev) => !prev);
@@ -608,4 +618,3 @@ export function useVideocallController(): VideocallController {
     },
   };
 }
-export { useVideocallController } from '../features/videocall/hooks/useVideocallController';
