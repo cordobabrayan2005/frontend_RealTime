@@ -6,6 +6,7 @@ export function useMedia() {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(true);
+  const [videoReadyVersion, setVideoReadyVersion] = useState(0);
 
   // Pedir permisos de micrófono inmediatamente
   useEffect(() => {
@@ -55,7 +56,11 @@ export function useMedia() {
           console.log('[FRONT] Obteniendo stream de video...');
           const stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: true
+            video: {
+              facingMode: 'user',
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
           });
           videoStreamRef.current = stream;
 
@@ -63,6 +68,7 @@ export function useMedia() {
             localVideoRef.current.srcObject = stream;
             localVideoRef.current.play().catch(console.error);
           }
+          setVideoReadyVersion((prev) => prev + 1);
         } catch (err: any) {
           console.error('[FRONT] ❌ Error obteniendo video:', err);
           setCameraOn(false);
@@ -70,6 +76,7 @@ export function useMedia() {
       } else if (!cameraOn && videoStreamRef.current) {
         videoStreamRef.current.getTracks().forEach(t => t.stop());
         videoStreamRef.current = null;
+        setVideoReadyVersion((prev) => prev + 1);
       }
     }
     ensureVideo();
@@ -82,6 +89,7 @@ export function useMedia() {
       if (videoStreamRef.current) videoStreamRef.current.getTracks().forEach(t => t.stop());
       audioStreamRef.current = null;
       videoStreamRef.current = null;
+      setVideoReadyVersion((prev) => prev + 1);
     };
   }, []);
 
@@ -92,6 +100,7 @@ export function useMedia() {
     cameraOn,
     setCameraOn,
     micOn,
-    setMicOn
+    setMicOn,
+    videoReadyVersion,
   };
 }

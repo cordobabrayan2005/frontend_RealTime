@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import io, { Socket } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
 
 /**
