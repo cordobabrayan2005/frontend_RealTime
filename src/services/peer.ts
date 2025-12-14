@@ -114,6 +114,7 @@ export function usePeer(
   };
 
   const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
+    console.log('[FRONT] Creando elemento audio para peer:', peerId);  // Agregar log
     let audio = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
     if (!audio) {
       audio = document.createElement('audio');
@@ -125,11 +126,19 @@ export function usePeer(
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
-    // Agregar verificación de tracks
+    console.log('[FRONT] Tracks de audio en stream:', stream.getAudioTracks().length);  // Agregar log
     if (stream.getAudioTracks().length > 0) {
-      audio.play().catch((err) => console.error('[FRONT] Autoplay audio:', err));
+      audio.play().catch((err) => {
+        console.error('[FRONT] Autoplay audio falló para peer:', peerId, err);  // Mejorar log
+        // Agregar listener de interacción si falla
+        const resume = () => {
+          audio?.play().catch(e => console.error('Aún fallando:', e));
+          document.removeEventListener('click', resume);
+        };
+        document.addEventListener('click', resume, { once: true });
+      });
     } else {
-      console.warn('[FRONT] No audio tracks in remote stream');
+      console.warn('[FRONT] No hay tracks de audio en stream para peer:', peerId);
     }
   };
 
