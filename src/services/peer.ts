@@ -40,7 +40,7 @@ const resolvePeerConfig = (
   source: string | undefined,
   fallback: string,
   fallbackHost?: string,
-  overrides: PeerOverrides = {}
+  overrides: PeerOverrides = {},
 ): PeerEndpointConfig => {
   const candidate = (source && source.trim()) || fallback;
   const hasProtocol = candidate.includes('://');
@@ -68,7 +68,7 @@ const resolvePeerConfig = (
   const secureOverride = parseBoolean(overrides.secure);
   const secure = secureOverride !== undefined ? secureOverride : url.protocol === 'https:';
   const portOverride = parsePort(overrides.port);
-  const port = portOverride ?? (url.port ? parseInt(url.port, 10) : (secure ? 443 : 80));
+  const port = portOverride ?? (url.port ? parseInt(url.port, 10) : secure ? 443 : 80);
 
   return {
     host: url.hostname,
@@ -102,16 +102,9 @@ export function usePeer(
       try {
         const data = JSON.parse(event.data);
         if (data?.type === 'mute') {
-          // Buscar el elemento video (no audio) para controlar el mute
-          const videoElement = document.querySelector(`video[data-audio-peer="${peerKey}"]`) as HTMLVideoElement | null;
-          if (videoElement) {
-            // En lugar de mutear el elemento, controlar el track del stream
-            if (videoElement.srcObject instanceof MediaStream) {
-              const audioTracks = videoElement.srcObject.getAudioTracks();
-              audioTracks.forEach(track => {
-                track.enabled = !data.muted;
-              });
-            }
+          const audioElement = document.querySelector(`audio[data-peer="${peerKey}"]`) as HTMLAudioElement | null;
+          if (audioElement) {
+            audioElement.muted = data.muted;
           }
         }
       } catch (error) {
@@ -120,70 +113,26 @@ export function usePeer(
     };
   };
 
-  // CORRECCIÓN PRINCIPAL: Usar VIDEO en lugar de AUDIO para mejor compatibilidad
   const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
-    console.log('[FRONT] Creando/actualizando elemento para audio de:', peerId, 
-      'Tracks de audio:', stream.getAudioTracks().length);
-    
-    // Usar VIDEO en lugar de AUDIO - mejor compatibilidad con autoplay
-    let video = document.querySelector(`video[data-audio-peer="${peerId}"]`) as HTMLVideoElement | null;
-    if (!video) {
-      video = document.createElement('video');
-      video.setAttribute('data-audio-peer', peerId);
-      video.autoplay = true;
-      video.setAttribute('playsinline', 'true');
-      video.setAttribute('webkit-playsinline', 'true');
-      video.muted = false; // CRÍTICO: no mutear para audio
-      video.volume = 1.0;
-      
-      // Ocultar completamente pero mantener activo
-      video.style.position = 'absolute';
-      video.style.left = '-9999px';
-      video.style.top = '-9999px';
-      video.style.width = '1px';
-      video.style.height = '1px';
-      video.style.opacity = '0';
-      video.style.pointerEvents = 'none';
-      video.style.zIndex = '-1';
-      
-      document.body.appendChild(video);
-      console.log('[FRONT] Elemento video creado para audio de:', peerId);
+    let audio = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.setAttribute('data-peer', peerId);
+      audio.autoplay = true;
+      audio.setAttribute('playsinline', 'true');
+      audio.volume = 1;
+      audio.muted = false;
+      document.body.appendChild(audio);
     }
-    
-    // Verificar si los tracks de audio están presentes
-    const audioTracks = stream.getAudioTracks();
-    if (audioTracks.length === 0) {
-      console.warn('[FRONT] Stream sin tracks de audio para:', peerId);
+    if (audio.srcObject !== stream) {
+      audio.srcObject = stream;
+    }
+    if (stream.getAudioTracks().length > 0) {
+      audio
+        .play()
+        .catch((err) => console.error('[FRONT] Autoplay audio:', err));
     } else {
-      console.log('[FRONT] Audio track enabled:', audioTracks[0].enabled);
-    }
-    
-    // Solo actualizar si es necesario
-    if (video.srcObject !== stream) {
-      video.srcObject = stream;
-      
-      // Intentar reproducir inmediatamente
-      const playPromise = video.play();
-      
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn('[FRONT] Autoplay bloqueado para:', peerId, err.name || err.message);
-          
-          // Estrategia de fallback para navegadores restrictivos
-          const resumeAudio = () => {
-            console.log('[FRONT] Reintentando reproducir audio después de interacción');
-            video?.play().catch(e => console.error('[FRONT] Error al reanudar:', e));
-            document.removeEventListener('click', resumeAudio);
-            document.removeEventListener('touchstart', resumeAudio);
-            document.removeEventListener('keydown', resumeAudio);
-          };
-          
-          // Esperar cualquier interacción del usuario
-          document.addEventListener('click', resumeAudio, { once: true });
-          document.addEventListener('touchstart', resumeAudio, { once: true });
-          document.addEventListener('keydown', resumeAudio, { once: true });
-        });
-      }
+      console.warn('[FRONT] No audio tracks in remote stream');
     }
   };
 
@@ -214,10 +163,10 @@ export function usePeer(
       fallbackBase,
       import.meta.env.VITE_PEERJS_HOST_VOICE,
       {
-        path: import.meta.env.VITE_PEERJS_PATH_VOICE,
+        path: import.meta.env.VITE_PEERJS_PATH_VOICE ?? '/peerjs',
         port: import.meta.env.VITE_PEERJS_PORT_VOICE,
         secure: import.meta.env.VITE_PEERJS_SECURE_VOICE,
-      }
+      },
     );
   }, []);
 
@@ -228,16 +177,15 @@ export function usePeer(
       fallbackBase,
       import.meta.env.VITE_PEERJS_HOST_VIDEO,
       {
-        path: import.meta.env.VITE_PEERJS_PATH_VIDEO,
+        path: import.meta.env.VITE_PEERJS_PATH_VIDEO ?? '/peerjs',
         port: import.meta.env.VITE_PEERJS_PORT_VIDEO,
         secure: import.meta.env.VITE_PEERJS_SECURE_VIDEO,
-      }
+      },
     );
   }, [isLocalhost]);
 
-  // ==================== PEER DE VOZ (PERSISTENTE) ====================
   useEffect(() => {
-    if (!meetingId || !user || !voiceSocket) return;  // No depende de micOn
+    if (!meetingId || !user || !voiceSocket) return;
 
     console.log('[FRONT] Inicializando Peer de voz...');
     const newPeerVoice = new Peer(`${user.id}_voice`, {
@@ -246,7 +194,7 @@ export function usePeer(
       secure: voicePeerConfig.secure,
       port: voicePeerConfig.port,
       debug: 1,
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
     });
 
     newPeerVoice.on('open', (id) => {
@@ -271,7 +219,6 @@ export function usePeer(
 
       call.on('stream', (remoteStream: MediaStream) => {
         console.log('[FRONT] Stream de voz recibido de:', call.peer);
-        // Usar la nueva función mejorada
         ensureRemoteAudioElement(call.peer, remoteStream);
       });
 
@@ -295,10 +242,9 @@ export function usePeer(
       }
       call.on('close', () => {
         console.log('[FRONT] Llamada de voz cerrada');
-        // Eliminar el elemento de audio cuando se cierra la llamada
-        const videoElement = document.querySelector(`video[data-audio-peer="${call.peer}"]`);
-        if (videoElement) {
-          videoElement.remove();
+        const audio = document.querySelector(`audio[data-peer="${call.peer}"]`);
+        if (audio) {
+          audio.remove();
         }
       });
       call.on('error', (err) => console.error('[FRONT] Error en llamada de voz:', err));
@@ -314,15 +260,12 @@ export function usePeer(
 
     return () => {
       console.log('[FRONT] Cleanup: destruyendo peer voz');
-      // Limpiar todos los elementos de audio al desmontar
-      document.querySelectorAll('video[data-audio-peer]').forEach(el => el.remove());
       newPeerVoice.destroy();
     };
-  }, [meetingId, user?.id, voiceSocket, voicePeerConfig]);  // Sin micOn
+  }, [meetingId, user?.id, voiceSocket, voicePeerConfig]);
 
-  // ==================== PEER DE VIDEO (PERSISTENTE) ====================
   useEffect(() => {
-    if (!meetingId || !user || !videoSocket) return;  // No depende de cameraOn
+    if (!meetingId || !user || !videoSocket) return;
 
     console.log('[FRONT] Inicializando Peer de video...');
     const newPeerVideo = new Peer(`${user.id}_video`, {
@@ -331,7 +274,7 @@ export function usePeer(
       secure: videoPeerConfig.secure,
       port: videoPeerConfig.port,
       debug: 1,
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
     });
 
     newPeerVideo.on('open', (id) => {
@@ -390,11 +333,14 @@ export function usePeer(
       console.log('[FRONT] Cleanup: destruyendo peer video');
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, videoSocket, videoPeerConfig]);  // Sin cameraOn
+  }, [meetingId, user?.id, videoSocket, videoPeerConfig, bumpRemoteStreamsVersion, remoteVideoRefs]);
 
-  // ==================== INICIAR LLAMADAS ====================
-  const initiateCall = async (peerId: string) => {
-    if (peerId.endsWith('_voice') && peerVoice) {
+  const initiateCall = useCallback(async (peerId: string) => {
+    if (peerId.endsWith('_voice')) {
+      if (!peerVoice) {
+        console.warn('[FRONT] Peer de voz no disponible para:', peerId);
+        return;
+      }
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
       const existingCall = peerCallsRef.current.get(peerId);
       if (existingCall) {
@@ -405,46 +351,52 @@ export function usePeer(
         }
         peerCallsRef.current.delete(peerId);
       }
-      const outboundStream = audioStreamRef.current ?? undefined;
-      const callVoice = callPeer(peerVoice, peerId, outboundStream);
+      const callVoice = callPeer(peerVoice, peerId, audioStreamRef.current ?? undefined);
       if (!callVoice) {
         console.warn('[FRONT] No se pudo iniciar la llamada de voz, instancia Peer inválida');
         return;
       }
       peerCallsRef.current.set(peerId, callVoice);
 
-      // Manejar DataChannel en llamada iniciada
       callVoice.on('stream', (remoteStream: MediaStream) => {
         console.log('[FRONT] Stream de voz recibido de:', peerId);
-        // Usar la nueva función mejorada
         ensureRemoteAudioElement(peerId, remoteStream);
       });
 
-      // Escuchar DataChannel
-      callVoice.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
-        attachMuteChannel(event.channel, peerId);
-      };
-      try {
-        const dataChannel = callVoice.peerConnection?.createDataChannel('mute-channel');
-        if (dataChannel) {
+      if (callVoice.peerConnection) {
+        callVoice.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
+          attachMuteChannel(event.channel, peerId);
+        };
+        try {
+          const dataChannel = callVoice.peerConnection.createDataChannel('mute-channel');
           dataChannel.onopen = () => {
             dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
           };
           attachMuteChannel(dataChannel, peerId);
           callVoice.dataChannel = dataChannel;
+        } catch (error) {
+          console.warn('[FRONT] Error creando DataChannel de mute (saliente):', error);
         }
-      } catch (error) {
-        console.warn('[FRONT] Error creando DataChannel de mute (saliente):', error);
       }
-      
-      // Limpiar elemento de audio al cerrar la llamada
+
       callVoice.on('close', () => {
-        const videoElement = document.querySelector(`video[data-audio-peer="${peerId}"]`);
-        if (videoElement) {
-          videoElement.remove();
+        console.log('[FRONT] Llamada de voz cerrada (saliente)');
+        const audio = document.querySelector(`audio[data-peer="${peerId}"]`);
+        if (audio) {
+          audio.remove();
         }
       });
-    } else if (peerId.endsWith('_video') && peerVideo) {
+      callVoice.on('error', (err: unknown) => {
+        console.error('[FRONT] Error en llamada de voz saliente:', err);
+      });
+      return;
+    }
+
+    if (peerId.endsWith('_video')) {
+      if (!peerVideo) {
+        console.warn('[FRONT] Peer de video no disponible para:', peerId);
+        return;
+      }
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const existingCall = peerCallsRef.current.get(peerId);
       if (existingCall) {
@@ -456,12 +408,16 @@ export function usePeer(
         peerCallsRef.current.delete(peerId);
       }
       const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : undefined;
+      if (!streamToSend) {
+        console.log('[FRONT] Iniciando llamada de video sin stream local para:', peerId);
+      }
       const callVideo = callPeer(peerVideo, peerId, streamToSend);
       if (!callVideo) {
         console.warn('[FRONT] No se pudo iniciar la llamada de video, instancia Peer inválida');
         return;
       }
       peerCallsRef.current.set(peerId, callVideo);
+
       callVideo.on('stream', (remoteStream: MediaStream) => {
         const participantId = extractUserIdFromPeer(peerId);
         remoteVideoRefs.current.set(participantId, remoteStream);
@@ -477,10 +433,11 @@ export function usePeer(
       callVideo.on('error', (err: unknown) => {
         console.error('[FRONT] Error en llamada de video saliente:', err);
       });
-    } else {
-      console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
+      return;
     }
-  };
+
+    console.log('[FRONT] No se puede iniciar llamada - peerId no reconocido:', peerId);
+  }, [peerVoice, peerVideo, audioStreamRef, videoStreamRef, micOn, cameraOn, remoteVideoRefs, bumpRemoteStreamsVersion]);
 
   const syncVideoTrack = useCallback((stream: MediaStream | null) => {
     const track = stream?.getVideoTracks()[0] ?? null;
@@ -500,11 +457,9 @@ export function usePeer(
               console.warn('[FRONT] Error al reemplazar track de video:', err);
             });
           });
-        } else {
+        } else if (stream) {
           try {
-            if (stream) {
-              pc.addTrack(track, stream);
-            }
+            pc.addTrack(track, stream);
           } catch (err) {
             console.warn('[FRONT] Error agregando track de video:', err);
           }
@@ -519,7 +474,6 @@ export function usePeer(
     });
   }, []);
 
-  // Agregar función para enviar mute a todos los peers
   const sendMuteToPeers = (muted: boolean) => {
     peerCallsRef.current.forEach((call) => {
       if (call.dataChannel && call.dataChannel.readyState === 'open') {
@@ -528,7 +482,6 @@ export function usePeer(
     });
   };
 
-  // Exportar sendMuteToPeers
   return {
     peerVoice,
     peerVideo,

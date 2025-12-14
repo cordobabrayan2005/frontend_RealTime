@@ -1,18 +1,11 @@
 import React from 'react';
-import { Toast } from '../components/videocall/Toast';
-import { ParticipantsGrid } from '../components/videocall/ParticipantsGrid';
-import { CallControls } from '../components/videocall/CallControls';
-import { MeetingCodeModal } from '../components/videocall/MeetingCodeModal';
-import { ChatPanel } from '../components/videocall/ChatPanel';
-import { useVideocallController } from '../hooks/useVideocallController';
+import { ParticipantsGrid } from '../features/videocall/components/ParticipantsGrid';
+import { CallControls } from '../features/videocall/components/CallControls';
+import { MeetingCodeModal } from '../features/videocall/components/MeetingCodeModal';
+import { ChatPanel } from '../features/videocall/components/ChatPanel';
+import { useVideocallController } from '../features/videocall/hooks/useVideocallController';
 
-/**
- * VideoCall React component.
- * Manages local media (camera/microphone), a simulated participants list and an in-call chat UI.
- *
- * @returns {JSX.Element} The video call page element.
- */
-export default function VideoCall() {
+const VideoCall: React.FC = () => {
   const {
     meetingId,
     meetingEnded,
@@ -53,10 +46,13 @@ export default function VideoCall() {
     );
   }
 
-
   return (
     <main className="videocall-page" role="main" aria-label="Videollamada">
-      <Toast message={modalMessage} isVisible={modalVisible} />
+      {modalVisible && (
+        <div className="rt-toast show">
+          {modalMessage}
+        </div>
+      )}
 
       <div className="vc-top-left-back" onClick={() => window.history.back()} aria-hidden>
         ←
@@ -100,4 +96,6 @@ export default function VideoCall() {
       />
     </main>
   );
-}
+};
+
+export default VideoCall;
