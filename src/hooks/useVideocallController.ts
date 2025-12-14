@@ -608,4 +608,3 @@ export function useVideocallController(): VideocallController {
     },
   };
 }
-export { useVideocallController } from '../features/videocall/hooks/useVideocallController';
