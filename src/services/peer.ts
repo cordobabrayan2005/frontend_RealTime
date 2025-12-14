@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import Peer from 'peerjs';
+import Peer, { MediaConnection } from 'peerjs';
 import { useAuthStore } from '../stores/authStore';
 
 type PeerEndpointConfig = {
@@ -113,6 +113,35 @@ export function usePeer(
     };
   };
 
+  const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
+    let audio = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.setAttribute('data-peer', peerId);
+      audio.autoplay = true;
+      audio.setAttribute('playsinline', 'true');
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+    }
+    audio.srcObject = stream;
+    audio.play().catch((err) => console.error('[FRONT] Autoplay audio:', err));
+  };
+
+  const callPeer = (peerInstance: Peer | null, peerId: string, stream?: MediaStream): MediaConnection | null => {
+    if (!peerInstance) return null;
+    return stream
+      ? peerInstance.call(peerId, stream)
+      : (peerInstance as unknown as { call: (id: string) => MediaConnection }).call(peerId);
+  };
+
+  const answerPeerCall = (call: any, stream?: MediaStream) => {
+    if (stream) {
+      call.answer(stream);
+    } else {
+      call.answer();
+    }
+  };
+
   const isLocalhost = useMemo(() => {
     if (typeof window === 'undefined') return false;
     return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -177,17 +206,12 @@ export function usePeer(
         }
         peerCallsRef.current.delete(call.peer);
       }
-      const outboundStream = audioStreamRef.current ?? new MediaStream();
-      call.answer(outboundStream);
+      const outboundStream = audioStreamRef.current ?? undefined;
+      answerPeerCall(call, outboundStream);
 
       call.on('stream', (remoteStream: MediaStream) => {
         console.log('[FRONT] Stream de voz recibido de:', call.peer);
-        const audio = document.createElement('audio');
-        audio.srcObject = remoteStream;
-        audio.autoplay = true;
-        audio.setAttribute('playsinline', 'true');
-        audio.setAttribute('data-peer', call.peer);
-        audio.play().catch(err => console.error('Autoplay audio:', err));
+        ensureRemoteAudioElement(call.peer, remoteStream);
       });
 
       try {
@@ -311,19 +335,18 @@ export function usePeer(
         }
         peerCallsRef.current.delete(peerId);
       }
-      const outboundStream = audioStreamRef.current ?? new MediaStream();
-      const callVoice = peerVoice.call(peerId, outboundStream);
+      const outboundStream = audioStreamRef.current ?? undefined;
+      const callVoice = callPeer(peerVoice, peerId, outboundStream);
+      if (!callVoice) {
+        console.warn('[FRONT] No se pudo iniciar la llamada de voz, instancia Peer inválida');
+        return;
+      }
       peerCallsRef.current.set(peerId, callVoice);
 
       // Manejar DataChannel en llamada iniciada
       callVoice.on('stream', (remoteStream: MediaStream) => {
         console.log('[FRONT] Stream de voz recibido de:', peerId);
-        const audio = document.createElement('audio');
-        audio.srcObject = remoteStream;
-        audio.setAttribute('data-peer', peerId);  // Para identificar
-        audio.autoplay = true;
-        audio.setAttribute('playsinline', 'true');
-        audio.play().catch(err => console.error('Autoplay audio:', err));
+        ensureRemoteAudioElement(peerId, remoteStream);
       });
 
       // Escuchar DataChannel
@@ -353,8 +376,12 @@ export function usePeer(
         }
         peerCallsRef.current.delete(peerId);
       }
-      const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : new MediaStream();
-      const callVideo = peerVideo.call(peerId, streamToSend);
+      const streamToSend = cameraOn && videoStreamRef.current ? videoStreamRef.current : undefined;
+      const callVideo = callPeer(peerVideo, peerId, streamToSend);
+      if (!callVideo) {
+        console.warn('[FRONT] No se pudo iniciar la llamada de video, instancia Peer inválida');
+        return;
+      }
       peerCallsRef.current.set(peerId, callVideo);
       callVideo.on('stream', (remoteStream: MediaStream) => {
         const participantId = extractUserIdFromPeer(peerId);
