@@ -135,6 +135,12 @@ export function useVideocallController(): VideocallController {
       entries.forEach((participant) => unique.set(participant.id, participant));
       setParticipants([localParticipant, ...Array.from(unique.values())]);
     };
+    const registerVideoPeer = (peerId?: string) => {
+      if (!peerId || !peerId.endsWith('_video')) {
+        return;
+      }
+      videoPeersRef.current.add(peerId);
+    };
     const addRemoteParticipant = (participant: Participant | null) => {
       if (!participant) return;
       setParticipants((prev) => {
@@ -316,9 +322,7 @@ export function useVideocallController(): VideocallController {
 
     const handleVideoJoined = (data: { peers: string[] }) => {
       data.peers.forEach((peerId) => {
-        if (peerId.endsWith('_video')) {
-          videoPeersRef.current.add(peerId);
-        }
+        registerVideoPeer(peerId);
         addRemoteParticipant(createRemoteParticipant(peerId));
         if (cameraOn) {
           initiateCall(peerId);
@@ -327,9 +331,7 @@ export function useVideocallController(): VideocallController {
     };
 
     const handlePeerJoinedVideo = (peerId: string) => {
-      if (peerId.endsWith('_video')) {
-        videoPeersRef.current.add(peerId);
-      }
+      registerVideoPeer(peerId);
       addRemoteParticipant(createRemoteParticipant(peerId));
       if (cameraOn) {
         initiateCall(peerId);
@@ -339,13 +341,23 @@ export function useVideocallController(): VideocallController {
     const handleRoomParticipants = (payload: { participants: Array<{ odiserId: string; displayName?: string }> }) => {
       if (!payload?.participants) return;
       const remote = payload.participants
-        .map(({ odiserId, displayName }) => createRemoteParticipant(odiserId, displayName))
+        .map(({ odiserId, displayName }) => {
+          registerVideoPeer(odiserId);
+          if (cameraOn) {
+            initiateCall(odiserId);
+          }
+          return createRemoteParticipant(odiserId, displayName);
+        })
         .filter(Boolean) as Participant[];
       setRemoteParticipants(remote);
     };
 
     const handleVideoParticipantJoined = (payload: { odiserId: string; displayName?: string }) => {
+      registerVideoPeer(payload.odiserId);
       addRemoteParticipant(createRemoteParticipant(payload.odiserId, payload.displayName));
+      if (cameraOn) {
+        initiateCall(payload.odiserId);
+      }
     };
 
     const handleVideoError = (msg: string) => {
