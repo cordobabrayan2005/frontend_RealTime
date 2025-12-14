@@ -159,9 +159,9 @@ export function usePeer(
       fallbackBase,
       import.meta.env.VITE_PEERJS_HOST_VOICE,
       {
-        path: '/peerjs',
+        path: import.meta.env.VITE_PEERJS_PATH_VOICE || import.meta.env.VITE_PEERJS_PATH || '/peerjs',
         port: import.meta.env.VITE_PEERJS_PORT_VOICE,
-        secure: import.meta.env.VITE_PEERJS_SECURE_VOICE,
+        secure: import.meta.env.VITE_PEERJS_SECURE_VOICE || import.meta.env.VITE_PEERJS_SECURE,
       }
     );
   }, []);
@@ -173,9 +173,9 @@ export function usePeer(
       fallbackBase,
       import.meta.env.VITE_PEERJS_HOST_VIDEO,
       {
-        path: import.meta.env.VITE_PEERJS_PATH_VIDEO,
+        path: import.meta.env.VITE_PEERJS_PATH_VIDEO || import.meta.env.VITE_PEERJS_PATH || '/peerjs',
         port: import.meta.env.VITE_PEERJS_PORT_VIDEO,
-        secure: import.meta.env.VITE_PEERJS_SECURE_VIDEO,
+        secure: import.meta.env.VITE_PEERJS_SECURE_VIDEO || import.meta.env.VITE_PEERJS_SECURE,
       }
     );
   }, [isLocalhost]);

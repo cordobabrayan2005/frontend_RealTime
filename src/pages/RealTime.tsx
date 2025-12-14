@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from '../stores/authStore';  // Corregido: ../stores/authStore
 import { api } from "../services/api";  // Corregido: ../services/api
@@ -14,6 +14,16 @@ import { api } from "../services/api";  // Corregido: ../services/api
 export default function RealTime() {
   useEffect(() => {
     document.body.classList.remove("login-page");
+  }, []);
+
+  const CHAT_BACKEND_FALLBACK = "https://realtimechatbackend-87nm.onrender.com";
+  const chatBackendUrl = useMemo(() => {
+    const raw = import.meta.env.VITE_CHAT_BACKEND_URL;
+    if (raw && raw.trim()) {
+      return raw.trim().replace(/\/+$/, "");
+    }
+    console.warn("[RealTime] VITE_CHAT_BACKEND_URL no está definido, usando fallback");
+    return CHAT_BACKEND_FALLBACK;
   }, []);
 
   /** Whether the "join by code" input is visible. */
@@ -55,7 +65,6 @@ export default function RealTime() {
       return;
     }
     try {
-      const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
       const response = await fetch(`${chatBackendUrl}/api/meetings`, {
         method: 'POST',
         headers: {
@@ -93,7 +102,6 @@ export default function RealTime() {
       return;
     }
     try {
-      const chatBackendUrl = 'https://realtimechatbackend-87nm.onrender.com';  // URL de Render desplegado
       const response = await fetch(`${chatBackendUrl}/api/meetings/${roomCode}`, {
         method: 'GET',
         headers: {
