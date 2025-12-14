@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+=======
+import { useEffect, useMemo, useState } from 'react';
+import io, { Socket } from 'socket.io-client';
+>>>>>>> 27e1fae321227082df5ce4b84f2a72a70a48c013
 import { useAuthStore } from '../stores/authStore';
 
 /**
@@ -12,9 +17,30 @@ export function useSockets(meetingId: string | undefined) {
   const [videoSocket, setVideoSocket] = useState<Socket | null>(null);  // Nuevo para video
   const [isCreator, setIsCreator] = useState(false);
 
-  const CHAT_BACKEND_URL = import.meta.env.VITE_CHAT_BACKEND_URL || 'https://realtimechatbackend-87nm.onrender.com';
-  const VOICE_BACKEND_URL = import.meta.env.VITE_VOICE_BACKEND_URL || 'https://realtimevoicebackend.onrender.com';
-  const VIDEO_BACKEND_URL = import.meta.env.VITE_VIDEO_BACKEND_URL || 'https://realtimevideocambackend.onrender.com';  // Nuevo
+  const isLocalhost = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  }, []);
+
+  const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+
+  const CHAT_BACKEND_URL = useMemo(() => {
+    const fallback = 'https://realtimechatbackend-87nm.onrender.com';
+    const raw = import.meta.env.VITE_CHAT_BACKEND_URL || fallback;
+    return stripTrailingSlash(raw);
+  }, []);
+
+  const VOICE_BACKEND_URL = useMemo(() => {
+    const fallback = 'https://realtimevoicebackend.onrender.com';
+    const raw = import.meta.env.VITE_VOICE_BACKEND_URL || fallback;
+    return stripTrailingSlash(raw);
+  }, []);
+
+  const VIDEO_BACKEND_URL = useMemo(() => {
+    const fallback = isLocalhost ? 'http://localhost:10001' : 'https://realtimevideocambackend.onrender.com';
+    const raw = import.meta.env.VITE_VIDEO_BACKEND_URL || fallback;
+    return stripTrailingSlash(raw);
+  }, [isLocalhost]);
 
   useEffect(() => {
     if (!meetingId || !token || !user) return;
