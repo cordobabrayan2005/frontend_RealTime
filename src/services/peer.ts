@@ -97,6 +97,22 @@ export function usePeer(
   const [peerStatus, setPeerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const peerCallsRef = useRef<Map<string, any>>(new Map());
 
+  const attachMuteChannel = (channel: RTCDataChannel, peerKey: string) => {
+    channel.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data?.type === 'mute') {
+          const audioElement = document.querySelector(`audio[data-peer="${peerKey}"]`) as HTMLAudioElement | null;
+          if (audioElement) {
+            audioElement.muted = data.muted;
+          }
+        }
+      } catch (error) {
+        console.warn('[FRONT] Error procesando mensaje de mute:', error);
+      }
+    };
+  };
+
   const isLocalhost = useMemo(() => {
     if (typeof window === 'undefined') return false;
     return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -161,38 +177,36 @@ export function usePeer(
         }
         peerCallsRef.current.delete(call.peer);
       }
-      if (audioStreamRef.current && micOn) {
-        call.answer(audioStreamRef.current);
-        call.on('stream', (remoteStream) => {
-          console.log('[FRONT] Stream de voz recibido de:', call.peer);
-          const audio = document.createElement('audio');
-          audio.srcObject = remoteStream;
-          audio.autoplay = true;
-          audio.setAttribute('playsinline', 'true');
-          audio.play().catch(err => console.error('Autoplay audio:', err));
-        });
-        // Crear DataChannel para mute
-        const dataChannel = call.peerConnection.createDataChannel('mute-channel');
-        dataChannel.onopen = () => {
-          console.log('[FRONT] DataChannel abierto para mute con:', call.peer);
-          // Enviar estado inicial de mute
-          dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
+      const outboundStream = audioStreamRef.current ?? new MediaStream();
+      call.answer(outboundStream);
+
+      call.on('stream', (remoteStream) => {
+        console.log('[FRONT] Stream de voz recibido de:', call.peer);
+        const audio = document.createElement('audio');
+        audio.srcObject = remoteStream;
+        audio.autoplay = true;
+        audio.setAttribute('playsinline', 'true');
+        audio.setAttribute('data-peer', call.peer);
+        audio.play().catch(err => console.error('Autoplay audio:', err));
+      });
+
+      try {
+        const dataChannel = call.peerConnection?.createDataChannel('mute-channel');
+        if (dataChannel) {
+          dataChannel.onopen = () => {
+            dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
+          };
+          attachMuteChannel(dataChannel, call.peer);
+          call.dataChannel = dataChannel;
+        }
+      } catch (error) {
+        console.warn('[FRONT] Error creando DataChannel de mute:', error);
+      }
+
+      if (call.peerConnection) {
+        call.peerConnection.ondatachannel = (event) => {
+          attachMuteChannel(event.channel, call.peer);
         };
-        dataChannel.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.type === 'mute') {
-            // Mutear/desmutear el audio remoto localmente
-            const audioElement = document.querySelector(`audio[data-peer="${call.peer}"]`) as HTMLAudioElement;
-            if (audioElement) {
-              audioElement.muted = data.muted;
-            }
-          }
-        };
-        // Guardar DataChannel en el call
-        call.dataChannel = dataChannel;
-      } else {
-        console.log('[FRONT] Rechazando llamada de voz - mic apagado');
-        call.close();
       }
       call.on('close', () => console.log('[FRONT] Llamada de voz cerrada'));
       call.on('error', (err) => console.error('[FRONT] Error en llamada de voz:', err));
@@ -286,7 +300,7 @@ export function usePeer(
 
   // ==================== INICIAR LLAMADAS ====================
   const initiateCall = async (peerId: string) => {
-    if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {
+    if (peerId.endsWith('_voice') && peerVoice) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
       const existingCall = peerCallsRef.current.get(peerId);
       if (existingCall) {
@@ -297,7 +311,8 @@ export function usePeer(
         }
         peerCallsRef.current.delete(peerId);
       }
-      const callVoice = peerVoice.call(peerId, audioStreamRef.current);
+      const outboundStream = audioStreamRef.current ?? new MediaStream();
+      const callVoice = peerVoice.call(peerId, outboundStream);
       peerCallsRef.current.set(peerId, callVoice);
 
       // Manejar DataChannel en llamada iniciada
@@ -313,16 +328,7 @@ export function usePeer(
 
       // Escuchar DataChannel
       callVoice.peerConnection.ondatachannel = (event) => {
-        const dataChannel = event.channel;
-        dataChannel.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.type === 'mute') {
-            const audioElement = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement;
-            if (audioElement) {
-              audioElement.muted = data.muted;
-            }
-          }
-        };
+        attachMuteChannel(event.channel, peerId);
       };
     } else if (peerId.endsWith('_video') && peerVideo) {
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
