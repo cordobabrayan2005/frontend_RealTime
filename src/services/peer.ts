@@ -1,6 +1,84 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Peer from 'peerjs';
 import { useAuthStore } from '../stores/authStore';
+
+type PeerEndpointConfig = {
+  host: string;
+  port: number;
+  secure: boolean;
+  path: string;
+};
+
+type PeerOverrides = {
+  path?: string;
+  port?: string;
+  secure?: string;
+};
+
+const ensureLeadingSlash = (value?: string): string => {
+  if (!value) return '/';
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '/') return '/';
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+};
+
+const parseBoolean = (value?: string): boolean | undefined => {
+  if (!value) return undefined;
+  const normalised = value.trim().toLowerCase();
+  if (normalised === 'true') return true;
+  if (normalised === 'false') return false;
+  return undefined;
+};
+
+const parsePort = (value?: string): number | undefined => {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const resolvePeerConfig = (
+  source: string | undefined,
+  fallback: string,
+  fallbackHost?: string,
+  overrides: PeerOverrides = {}
+): PeerEndpointConfig => {
+  const candidate = (source && source.trim()) || fallback;
+  const hasProtocol = candidate.includes('://');
+  const normalised = hasProtocol ? candidate : `https://${candidate}`;
+
+  let url: URL;
+  try {
+    url = new URL(normalised);
+  } catch (error) {
+    if (!fallbackHost) {
+      throw error;
+    }
+    const secureFallback = parseBoolean(overrides.secure);
+    const secure = secureFallback !== undefined ? secureFallback : fallback.startsWith('https://');
+    const portOverride = parsePort(overrides.port);
+    const port = portOverride ?? (secure ? 443 : 80);
+    return {
+      host: fallbackHost,
+      secure,
+      port,
+      path: ensureLeadingSlash(overrides.path),
+    };
+  }
+
+  const secureOverride = parseBoolean(overrides.secure);
+  const secure = secureOverride !== undefined ? secureOverride : url.protocol === 'https:';
+  const portOverride = parsePort(overrides.port);
+  const port = portOverride ?? (url.port ? parseInt(url.port, 10) : (secure ? 443 : 80));
+
+  return {
+    host: url.hostname,
+    secure,
+    port,
+    path: ensureLeadingSlash(overrides.path),
+  };
+};
+
+const extractUserIdFromPeer = (peerId: string): string => peerId.replace(/_(voice|video)$/i, '');
 
 export function usePeer(
   meetingId: string | undefined,
@@ -18,8 +96,38 @@ export function usePeer(
   const [peerStatus, setPeerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const peerCallsRef = useRef<Map<string, any>>(new Map());
 
-  const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
-  const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
+  const isLocalhost = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  }, []);
+
+  const voicePeerConfig = useMemo(() => {
+    const fallbackBase = import.meta.env.VITE_VOICE_BACKEND_URL || 'https://realtimevoicebackend.onrender.com';
+    return resolvePeerConfig(
+      import.meta.env.VITE_PEERJS_URL_VOICE || import.meta.env.VITE_PEERJS_HOST_VOICE,
+      fallbackBase,
+      import.meta.env.VITE_PEERJS_HOST_VOICE,
+      {
+        path: import.meta.env.VITE_PEERJS_PATH_VOICE,
+        port: import.meta.env.VITE_PEERJS_PORT_VOICE,
+        secure: import.meta.env.VITE_PEERJS_SECURE_VOICE,
+      }
+    );
+  }, []);
+
+  const videoPeerConfig = useMemo(() => {
+    const fallbackBase = isLocalhost ? 'http://localhost:10001' : 'https://realtimevideocambackend.onrender.com';
+    return resolvePeerConfig(
+      import.meta.env.VITE_PEERJS_URL_VIDEO || import.meta.env.VITE_VIDEO_BACKEND_URL || import.meta.env.VITE_PEERJS_HOST_VIDEO,
+      fallbackBase,
+      import.meta.env.VITE_PEERJS_HOST_VIDEO,
+      {
+        path: import.meta.env.VITE_PEERJS_PATH_VIDEO,
+        port: import.meta.env.VITE_PEERJS_PORT_VIDEO,
+        secure: import.meta.env.VITE_PEERJS_SECURE_VIDEO,
+      }
+    );
+  }, [isLocalhost]);
 
   // ==================== PEER DE VOZ (PERSISTENTE) ====================
   useEffect(() => {
@@ -27,10 +135,10 @@ export function usePeer(
 
     console.log('[FRONT] Inicializando Peer de voz...');
     const newPeerVoice = new Peer(`${user.id}_voice`, {
-      host: PEERJS_HOST_VOICE,
-      path: '/',
-      secure: true,
-      port: 443,
+      host: voicePeerConfig.host,
+      path: voicePeerConfig.path,
+      secure: voicePeerConfig.secure,
+      port: voicePeerConfig.port,
       debug: 1,
       config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
@@ -38,7 +146,7 @@ export function usePeer(
     newPeerVoice.on('open', (id) => {
       console.log('[FRONT] ✅ Peer voz conectado:', id);
       setPeerStatus('connected');
-      voiceSocket.emit('join-voice-room', { meetingId, peerId: `${user.id}_voice`, userId: user.id });
+      voiceSocket.emit('join-voice-room', { meetingId, peerId: newPeerVoice.id, userId: user.id });
     });
 
     newPeerVoice.on('call', (call) => {
@@ -92,7 +200,7 @@ export function usePeer(
       console.log('[FRONT] Cleanup: destruyendo peer voz');
       newPeerVoice.destroy();
     };
-  }, [meetingId, user?.id, voiceSocket]);  // Sin micOn
+  }, [meetingId, user?.id, voiceSocket, voicePeerConfig]);  // Sin micOn
 
   // ==================== PEER DE VIDEO (PERSISTENTE) ====================
   useEffect(() => {
@@ -100,10 +208,10 @@ export function usePeer(
 
     console.log('[FRONT] Inicializando Peer de video...');
     const newPeerVideo = new Peer(`${user.id}_video`, {
-      host: PEERJS_HOST_VIDEO,
-      path: '/',
-      secure: true,
-      port: 443,
+      host: videoPeerConfig.host,
+      path: videoPeerConfig.path,
+      secure: videoPeerConfig.secure,
+      port: videoPeerConfig.port,
       debug: 1,
       config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
@@ -111,7 +219,7 @@ export function usePeer(
     newPeerVideo.on('open', (id) => {
       console.log('[FRONT] ✅ Peer video conectado:', id);
       setPeerStatus('connected');
-      videoSocket.emit('join-video-room', { meetingId, peerId: `${user.id}_video`, userId: user.id });
+      videoSocket.emit('join-video-room', { meetingId, peerId: newPeerVideo.id, userId: user.id });
     });
 
     newPeerVideo.on('call', (call) => {
@@ -120,7 +228,7 @@ export function usePeer(
         call.answer(videoStreamRef.current);
         call.on('stream', (remoteStream) => {
           console.log('[FRONT] Stream de video recibido de:', call.peer);
-          const userId = call.peer.split('_')[0];
+          const userId = extractUserIdFromPeer(call.peer);
           remoteVideoRefs.current.set(userId, remoteStream);
           const video = document.createElement('video');
           video.srcObject = remoteStream;
@@ -135,7 +243,7 @@ export function usePeer(
       }
       call.on('close', () => {
         console.log('[FRONT] Llamada de video cerrada');
-        const userId = call.peer.split('_')[0];
+        const userId = extractUserIdFromPeer(call.peer);
         remoteVideoRefs.current.delete(userId);
       });
       call.on('error', (err) => console.error('[FRONT] Error en llamada de video:', err));
@@ -153,7 +261,7 @@ export function usePeer(
       console.log('[FRONT] Cleanup: destruyendo peer video');
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, videoSocket]);  // Sin cameraOn
+  }, [meetingId, user?.id, videoSocket, videoPeerConfig]);  // Sin cameraOn
 
   // ==================== INICIAR LLAMADAS ====================
   const initiateCall = async (peerId: string) => {
@@ -187,10 +295,23 @@ export function usePeer(
         };
       };
     } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {
-      // Video sin cambios
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
+
+      callVideo.on('stream', (remoteStream) => {
+        const participantId = extractUserIdFromPeer(peerId);
+        remoteVideoRefs.current.set(participantId, remoteStream);
+      });
+
+      callVideo.on('close', () => {
+        const participantId = extractUserIdFromPeer(peerId);
+        remoteVideoRefs.current.delete(participantId);
+      });
+
+      callVideo.on('error', (err: unknown) => {
+        console.error('[FRONT] Error en llamada de video saliente:', err);
+      });
     } else {
       console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
     }
