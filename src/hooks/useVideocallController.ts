@@ -430,10 +430,10 @@ export function useVideocallController(): VideocallController {
     videoSocket.on('room-participants', handleRoomParticipants);
     videoSocket.on('participant-joined', handleVideoParticipantJoined);
 
-    const cleanupWebRTC = setupWebRTCHandlers(voiceSocket, peerCallsRef, audioStreamRef);
+    
 
     return () => {
-      cleanupWebRTC();
+  
     };
   }, [
     socket,

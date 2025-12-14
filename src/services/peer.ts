@@ -120,11 +120,17 @@ export function usePeer(
       audio.setAttribute('data-peer', peerId);
       audio.autoplay = true;
       audio.setAttribute('playsinline', 'true');
-      audio.style.display = 'none';
+      audio.volume = 1;  // Agregar
+      audio.muted = false;  // Agregar
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
-    audio.play().catch((err) => console.error('[FRONT] Autoplay audio:', err));
+    // Agregar verificación de tracks
+    if (stream.getAudioTracks().length > 0) {
+      audio.play().catch((err) => console.error('[FRONT] Autoplay audio:', err));
+    } else {
+      console.warn('[FRONT] No audio tracks in remote stream');
+    }
   };
 
   const callPeer = (peerInstance: Peer | null, peerId: string, stream?: MediaStream): MediaConnection | null => {
@@ -154,7 +160,7 @@ export function usePeer(
       fallbackBase,
       import.meta.env.VITE_PEERJS_HOST_VOICE,
       {
-        path: import.meta.env.VITE_PEERJS_PATH_VOICE,
+        path: '/peerjs',  // Agregado para voz
         port: import.meta.env.VITE_PEERJS_PORT_VOICE,
         secure: import.meta.env.VITE_PEERJS_SECURE_VOICE,
       }
