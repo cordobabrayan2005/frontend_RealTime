@@ -114,25 +114,31 @@ export function usePeer(
   };
 
   const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
-    console.log('[FRONT] Creando elemento audio para peer:', peerId);  // Agregar log
-    let audio = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.setAttribute('data-peer', peerId);
-      audio.autoplay = true;
-      audio.setAttribute('playsinline', 'true');
-      audio.volume = 1;  // Agregar
-      audio.muted = false;  // Agregar
-      document.body.appendChild(audio);
+    console.log('[FRONT] Creando elemento video oculto para peer:', peerId);  // Cambiar log
+    let video = document.querySelector(`video[data-peer="${peerId}"]`) as HTMLVideoElement | null;
+    if (!video) {
+      video = document.createElement('video');
+      video.setAttribute('data-peer', peerId);
+      video.autoplay = true;
+      video.setAttribute('playsinline', 'true');
+      video.volume = 1;
+      video.muted = false;  // No mutear para reproducir audio
+      video.style.position = 'absolute';
+      video.style.left = '-9999px';
+      video.style.top = '-9999px';
+      video.style.width = '1px';
+      video.style.height = '1px';
+      video.style.opacity = '0';
+      document.body.appendChild(video);
     }
-    audio.srcObject = stream;
-    console.log('[FRONT] Tracks de audio en stream:', stream.getAudioTracks().length);  // Agregar log
+    video.srcObject = stream;
+    console.log('[FRONT] Tracks de audio en stream:', stream.getAudioTracks().length);
     if (stream.getAudioTracks().length > 0) {
-      audio.play().catch((err) => {
-        console.error('[FRONT] Autoplay audio falló para peer:', peerId, err);  // Mejorar log
-        // Agregar listener de interacción si falla
+      video.play().catch((err) => {
+        console.error('[FRONT] Autoplay video falló para peer:', peerId, err);
+        // Listener de interacción para reproducir
         const resume = () => {
-          audio?.play().catch(e => console.error('Aún fallando:', e));
+          video?.play().catch(e => console.error('Aún fallando:', e));
           document.removeEventListener('click', resume);
         };
         document.addEventListener('click', resume, { once: true });
