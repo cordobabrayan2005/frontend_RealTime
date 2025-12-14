@@ -103,6 +103,15 @@ export function useVideocallController(): VideocallController {
   const [messages, setMessages] = useState<ChatMessage[]>(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const participantNamesRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const nextMap = new Map<string, string>();
+    participants.forEach((participant) => {
+      nextMap.set(participant.id, participant.name);
+    });
+    participantNamesRef.current = nextMap;
+  }, [participants]);
 
   useEffect(() => {
     setParticipants((prev) => {
@@ -121,6 +130,8 @@ export function useVideocallController(): VideocallController {
     const normalizePeerId = (value: string) => value.replace(/_(voice|video)$/i, '');
     const makeRemoteName = (baseId: string, preferred?: string) => {
       if (preferred && preferred !== 'User') return preferred;
+      const existing = participantNamesRef.current.get(baseId);
+      if (existing && existing !== 'Tú') return existing;
       const suffix = baseId.slice(-4).toUpperCase();
       return `Participante ${suffix || baseId}`;
     };
@@ -137,6 +148,10 @@ export function useVideocallController(): VideocallController {
     };
     const registerVideoPeer = (peerId?: string) => {
       if (!peerId || !peerId.endsWith('_video')) {
+        return;
+      }
+      const participantId = normalizePeerId(peerId);
+      if (participantId === user.id) {
         return;
       }
       videoPeersRef.current.add(peerId);
@@ -355,7 +370,7 @@ export function useVideocallController(): VideocallController {
     const handleVideoParticipantJoined = (payload: { odiserId: string; displayName?: string }) => {
       registerVideoPeer(payload.odiserId);
       addRemoteParticipant(createRemoteParticipant(payload.odiserId, payload.displayName));
-      if (cameraOn) {
+      if (cameraOn && payload.odiserId && !payload.odiserId.startsWith(`${user.id}_`)) {
         initiateCall(payload.odiserId);
       }
     };
