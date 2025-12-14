@@ -32,7 +32,7 @@ export function useVideoCall(
     new Map()
   );
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +50,11 @@ export function useVideoCall(
         video: true,
         audio: true,
       });
+
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      setIsAudioEnabled(false);
 
       setLocalStream(stream);
       localStreamRef.current = stream;

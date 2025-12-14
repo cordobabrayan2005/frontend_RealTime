@@ -1,6 +1,6 @@
 import Peer, { type MediaConnection } from "peerjs";
 
-const resolveBoolean = (value: string | undefined, fallback: boolean) => {
+const parseBoolean = (value: string | undefined, fallback: boolean) => {
   if (value === undefined || value === null) {
     return fallback;
   }
@@ -10,25 +10,47 @@ const resolveBoolean = (value: string | undefined, fallback: boolean) => {
   return fallback;
 };
 
+const parsePort = (value: string | undefined, fallback: number) => {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const host =
+  import.meta.env.VITE_PEER_HOST ||
+  import.meta.env.VITE_PEERJS_HOST_VIDEO ||
+  import.meta.env.VITE_PEERJS_HOST ||
+  "localhost";
+
+const isLocalHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(host);
+
+const secure = parseBoolean(
+  import.meta.env.VITE_PEER_SECURE ||
+    import.meta.env.VITE_PEERJS_SECURE_VIDEO ||
+    import.meta.env.VITE_PEERJS_SECURE,
+  !isLocalHost
+);
+
+const port = parsePort(
+  import.meta.env.VITE_PEER_PORT ||
+    import.meta.env.VITE_PEERJS_PORT_VIDEO ||
+    import.meta.env.VITE_PEERJS_PORT,
+  isLocalHost ? 3003 : secure ? 443 : 80
+);
+
+const path =
+  import.meta.env.VITE_PEER_PATH ||
+  import.meta.env.VITE_PEERJS_PATH_VIDEO ||
+  import.meta.env.VITE_PEERJS_PATH ||
+  "/peerjs";
+
 const PEER_CONFIG = {
-  host:
-    import.meta.env.VITE_PEER_HOST ||
-    import.meta.env.VITE_PEERJS_HOST_VIDEO ||
-    "localhost",
-  port:
-    Number(
-      import.meta.env.VITE_PEER_PORT ||
-        import.meta.env.VITE_PEERJS_PORT_VIDEO ||
-        3003
-    ) || 3003,
-  path:
-    import.meta.env.VITE_PEER_PATH ||
-    import.meta.env.VITE_PEERJS_PATH_VIDEO ||
-    "/peerjs",
-  secure: resolveBoolean(
-    import.meta.env.VITE_PEER_SECURE || import.meta.env.VITE_PEERJS_SECURE_VIDEO,
-    false
-  ),
+  host,
+  port,
+  path,
+  secure,
   debug: import.meta.env.DEV ? 2 : 0,
   config: {
     iceServers: [
