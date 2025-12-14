@@ -10,7 +10,8 @@ export function usePeer(
   videoStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar videoStreamRef
   cameraOn: boolean,
   micOn: boolean,
-  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>
+  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>,
+  bumpRemoteStreamsVersion: () => void,
 ) {
   const { user } = useAuthStore();
   const [peerVoice, setPeerVoice] = useState<Peer | null>(null);
@@ -122,12 +123,7 @@ export function usePeer(
           console.log('[FRONT] Stream de video recibido de:', call.peer);
           const userId = call.peer.split('_')[0];
           remoteVideoRefs.current.set(userId, remoteStream);
-          const video = document.createElement('video');
-          video.srcObject = remoteStream;
-          video.autoplay = true;
-          video.setAttribute('playsinline', 'true');
-          video.muted = false;
-          video.play().catch(err => console.error('Autoplay video:', err));
+          bumpRemoteStreamsVersion();
         });
       } else {
         console.log('[FRONT] Rechazando llamada de video - cámara apagada');
@@ -137,6 +133,7 @@ export function usePeer(
         console.log('[FRONT] Llamada de video cerrada');
         const userId = call.peer.split('_')[0];
         remoteVideoRefs.current.delete(userId);
+        bumpRemoteStreamsVersion();
       });
       call.on('error', (err) => console.error('[FRONT] Error en llamada de video:', err));
       peerCallsRef.current.set(call.peer, call);
@@ -191,6 +188,17 @@ export function usePeer(
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
+      callVideo.on('stream', (remoteStream) => {
+        console.log('[FRONT] Stream de video recibido de:', peerId);
+        const userId = peerId.split('_')[0];
+        remoteVideoRefs.current.set(userId, remoteStream);
+        bumpRemoteStreamsVersion();
+      });
+      callVideo.on('close', () => {
+        const userId = peerId.split('_')[0];
+        remoteVideoRefs.current.delete(userId);
+        bumpRemoteStreamsVersion();
+      });
     } else {
       console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
     }

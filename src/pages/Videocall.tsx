@@ -26,6 +26,7 @@ export default function VideoCall() {
     messages,
     localVideoRef,
     remoteVideoRefs,
+    remoteStreamsVersion,
     cameraOn,
     micOn,
     handlers: {
@@ -66,6 +67,7 @@ export default function VideoCall() {
         localVideoRef={localVideoRef}
         cameraOn={cameraOn}
         remoteVideoRefs={remoteVideoRefs}
+        remoteStreamsVersion={remoteStreamsVersion}
       />
 
       <CallControls

@@ -7,6 +7,7 @@ interface ParticipantsGridProps {
   localVideoRef: React.MutableRefObject<HTMLVideoElement | null>;
   cameraOn: boolean;
   remoteVideoRefs: React.MutableRefObject<Map<string, MediaStream>>;
+  remoteStreamsVersion: number;
 }
 
 const getInitials = (name: string) => name.split(' ').map((n) => n[0]).join('').slice(0, 2);
@@ -16,6 +17,7 @@ export const ParticipantsGrid: React.FC<ParticipantsGridProps> = ({
   localVideoRef,
   cameraOn,
   remoteVideoRefs,
+  remoteStreamsVersion,
 }) => (
   <section className={`vc-grid ${participants.length === 1 ? 'single' : ''}`} aria-live="polite">
     {participants.map((participant) => (
@@ -35,7 +37,11 @@ export const ParticipantsGrid: React.FC<ParticipantsGridProps> = ({
               <div className="vc-avatar">Tú</div>
             )
           ) : remoteVideoRefs.current?.has(participant.id) ? (
-            <ParticipantVideo participantId={participant.id} remoteVideoRefs={remoteVideoRefs} />
+            <ParticipantVideo
+              participantId={participant.id}
+              remoteVideoRefs={remoteVideoRefs}
+              version={remoteStreamsVersion}
+            />
           ) : (
             <div className="vc-avatar">{getInitials(participant.name)}</div>
           )}

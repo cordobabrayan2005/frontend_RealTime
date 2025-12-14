@@ -3,9 +3,10 @@ import React, { useEffect, useRef } from 'react';
 interface ParticipantVideoProps {
   participantId: string;
   remoteVideoRefs: React.MutableRefObject<Map<string, MediaStream>>;
+  version: number;
 }
 
-export const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participantId, remoteVideoRefs }) => {
+export const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participantId, remoteVideoRefs, version }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -14,7 +15,7 @@ export const ParticipantVideo: React.FC<ParticipantVideoProps> = ({ participantI
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(console.error);
     }
-  }, [participantId, remoteVideoRefs]);
+  }, [participantId, remoteVideoRefs, version]);
 
   return (
     <video ref={videoRef} className="vc-remote-video" playsInline />
