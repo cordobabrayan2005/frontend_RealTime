@@ -340,25 +340,39 @@ export function useVideocallController(): VideocallController {
       const isVideoPeer = peerId.endsWith('_video');
       if (isVideoPeer) {
         if (participantId) {
-          remoteVideoRefs.current.delete(participantId);
+          if (remoteVideoRefs.current.delete(participantId)) {
+            bumpRemoteStreamsVersion();
+          }
+          const registeredPeer = participantToVideoPeerRef.current.get(participantId);
+          if (registeredPeer === peerId) {
+            participantToVideoPeerRef.current.delete(participantId);
+          }
         }
         videoPeersRef.current.delete(peerId);
         peerIdToParticipantRef.current.delete(peerId);
-        bumpRemoteStreamsVersion();
-      } else if (participantId) {
-        remoteVideoRefs.current.delete(participantId);
+        return;
       }
-      if (participantId && isVideoPeer) {
-        participantToVideoPeerRef.current.delete(participantId);
-        const socketId = participantToSocketIdRef.current.get(participantId);
-        if (socketId) {
-          socketIdToParticipantRef.current.delete(socketId);
-          participantToSocketIdRef.current.delete(participantId);
+
+      if (!participantId) {
+        return;
+      }
+
+      remoteVideoRefs.current.delete(participantId);
+      videoPeersRef.current.forEach((storedPeerId) => {
+        if (storedPeerId.startsWith(`${participantId}_`)) {
+          videoPeersRef.current.delete(storedPeerId);
+          peerIdToParticipantRef.current.delete(storedPeerId);
+          participantToVideoPeerRef.current.delete(participantId);
         }
+      });
+
+      const socketId = participantToSocketIdRef.current.get(participantId);
+      if (socketId) {
+        socketIdToParticipantRef.current.delete(socketId);
+        participantToSocketIdRef.current.delete(participantId);
       }
-      if (participantId) {
-        removeRemoteParticipant(participantId);
-      }
+
+      removeRemoteParticipant(participantId);
     };
 
     const handleVoiceError = (msg: string) => {
