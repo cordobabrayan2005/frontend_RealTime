@@ -99,6 +99,7 @@ export function useVideocallController(): VideocallController {
     micOn,
     remoteVideoRefs,
     bumpRemoteStreamsVersion,
+    videoReadyVersion,
   );
 
   const [showCode, setShowCode] = useState(false);
