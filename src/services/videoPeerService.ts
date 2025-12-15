@@ -72,12 +72,17 @@ const PEER_CONFIG = {
   debug: import.meta.env.DEV ? 2 : 0,
   config: {
     iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun2.l.google.com:19302" },
-      { urls: "stun:stun3.l.google.com:19302" },
-    ],
-  },
+      {
+        urls: [
+          "turn:relay1.expressturn.com:3480?transport=udp",
+          "turn:relay1.expressturn.com:3480?transport=tcp",
+          "turns:relay1.expressturn.com:443"
+        ],
+        username: "000000002081173935",
+        credential: "gWuSuOJzycRF1q2lE3W/AjLFpfU="
+      }
+    ]
+  }
 };
 
 /**
