@@ -77,7 +77,19 @@ export function usePeer(
       secure: true,
       port: 443,
       debug: 1,
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      config: {
+        iceServers: [
+          {
+            urls: [
+              'turn:relay1.expressturn.com:3480?transport=udp',
+              'turn:relay1.expressturn.com:3480?transport=tcp',
+              'turns:relay1.expressturn.com:443'
+            ],
+            username: '000000002081173935',
+            credential: 'gWuSuOJzycRF1q2lE3W/AjLFpfU='
+          }
+        ]
+      }
     });
 
     newPeerVoice.on('open', (id) => {
@@ -150,7 +162,19 @@ export function usePeer(
       secure: true,
       port: 443,
       debug: 1,
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      config: {
+        iceServers: [
+          {
+            urls: [
+              'turn:relay1.expressturn.com:3480?transport=udp',
+              'turn:relay1.expressturn.com:3480?transport=tcp',
+              'turns:relay1.expressturn.com:443'
+            ],
+            username: '000000002081173935',
+            credential: 'gWuSuOJzycRF1q2lE3W/AjLFpfU='
+          }
+        ]
+      }
     });
 
     newPeerVideo.on('open', (id) => {
