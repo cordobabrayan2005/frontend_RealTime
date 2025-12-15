@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useMedia } from '../services/media';
@@ -10,8 +10,9 @@ import { setupWebRTCHandlers } from '../services/webrtc';
 interface ParticipantVideoProps {
   participantId: string;
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>;
+  version: number;
 }
-function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoProps) {
+function ParticipantVideo({ participantId, remoteVideoRefs, version }: ParticipantVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const stream = remoteVideoRefs.current.get(participantId);
@@ -19,7 +20,7 @@ function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoPr
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(console.error);
     }
-  }, [participantId, remoteVideoRefs]);
+  }, [participantId, remoteVideoRefs, version]);
   return (
     <video
       ref={videoRef}
@@ -41,6 +42,18 @@ export default function VideoCall() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const remoteVideoRefs = useRef(new Map<string, MediaStream>());
+  const videoPeersRef = useRef(new Set<string>());
+  const peerIdToParticipantRef = useRef(new Map<string, string>());
+  const participantToPeerRef = useRef(new Map<string, string>());
+  const socketIdToParticipantRef = useRef(new Map<string, string>());
+  const participantToSocketIdRef = useRef(new Map<string, string>());
+  const [remoteStreamsVersion, setRemoteStreamsVersion] = useState(0);
+
+  const bumpRemoteStreamsVersion = useCallback(() => {
+    setRemoteStreamsVersion((prev) => prev + 1);
+  }, []);
+
+  const extractUserIdFromPeer = useCallback((peerId: string) => peerId?.replace(/_(voice|video)$/i, '') || '', []);
 
   const {
     audioStreamRef,  // Nuevo: Usar audioStreamRef para voz
@@ -66,7 +79,7 @@ export default function VideoCall() {
     peerCallsRef,
     initiateCall,
     sendMuteToPeers
-  } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
+  } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs, bumpRemoteStreamsVersion);
 
   const [showCode, setShowCode] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -137,6 +150,13 @@ export default function VideoCall() {
         });
         videoStreamRef.current = null;
       }
+      remoteVideoRefs.current.clear();
+      videoPeersRef.current.clear();
+      peerIdToParticipantRef.current.clear();
+      participantToPeerRef.current.clear();
+      socketIdToParticipantRef.current.clear();
+      participantToSocketIdRef.current.clear();
+      bumpRemoteStreamsVersion();
       // Destruir peers de voz y video
       try {
         peerVoice?.destroy();
@@ -188,6 +208,20 @@ export default function VideoCall() {
     const handleUserLeft = (data: { userId: string }) => {
       console.log('[FRONT] Usuario salió:', data);
       setParticipants((prev) => prev.filter(p => p.id !== data.userId));
+      if (!data.userId) return;
+      remoteVideoRefs.current.delete(data.userId);
+      const peerId = participantToPeerRef.current.get(data.userId);
+      if (peerId) {
+        videoPeersRef.current.delete(peerId);
+        peerIdToParticipantRef.current.delete(peerId);
+      }
+      participantToPeerRef.current.delete(data.userId);
+      const socketId = participantToSocketIdRef.current.get(data.userId);
+      if (socketId) {
+        socketIdToParticipantRef.current.delete(socketId);
+        participantToSocketIdRef.current.delete(data.userId);
+      }
+      bumpRemoteStreamsVersion();
     };
 
     const handleSocketError = (msg: string) => {
@@ -214,6 +248,17 @@ export default function VideoCall() {
         pc.close();
         peerCallsRef.current.delete(peerId);
       }
+      videoPeersRef.current.delete(peerId);
+      const participantId = peerIdToParticipantRef.current.get(peerId) || extractUserIdFromPeer(peerId);
+      peerIdToParticipantRef.current.delete(peerId);
+      if (participantId) {
+        participantToPeerRef.current.delete(participantId);
+        const socketId = participantToSocketIdRef.current.get(participantId);
+        if (socketId) {
+          socketIdToParticipantRef.current.delete(socketId);
+          participantToSocketIdRef.current.delete(participantId);
+        }
+      }
     };
 
     const handleVoiceError = (msg: string) => {
@@ -225,19 +270,80 @@ export default function VideoCall() {
     const handleVideoJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
       data.peers.forEach(peerId => {
-        if (cameraOn) initiateCall(peerId);
+        const participantId = extractUserIdFromPeer(peerId);
+        if (!participantId || participantId === user?.id) {
+          return;
+        }
+        videoPeersRef.current.add(peerId);
+        peerIdToParticipantRef.current.set(peerId, participantId);
+        participantToPeerRef.current.set(participantId, peerId);
+        initiateCall(peerId);
       });
     };
 
     const handlePeerJoinedVideo = (peerId: string) => {
       console.log('[FRONT] Peer joined video:', peerId);
-      if (cameraOn) initiateCall(peerId);
+      const participantId = extractUserIdFromPeer(peerId);
+      if (!participantId || participantId === user?.id) {
+        return;
+      }
+      videoPeersRef.current.add(peerId);
+      peerIdToParticipantRef.current.set(peerId, participantId);
+      participantToPeerRef.current.set(participantId, peerId);
+      initiateCall(peerId);
     };
 
     const handleVideoError = (msg: string) => {
       console.error('[FRONT] Video error:', msg);
       setModalMessage(`Video error: ${msg}`);
       setModalVisible(true);
+    };
+
+    const handleRoomParticipants = (payload: { participants: Array<{ socketId?: string; odiserId: string; userId?: string }> }) => {
+      if (!payload?.participants) return;
+      payload.participants.forEach(({ socketId, odiserId, userId: remoteUserId }) => {
+        if (!odiserId) return;
+        const participantId = (remoteUserId && remoteUserId.trim()) || extractUserIdFromPeer(odiserId);
+        if (!participantId || participantId === user?.id) return;
+        videoPeersRef.current.add(odiserId);
+        peerIdToParticipantRef.current.set(odiserId, participantId);
+        participantToPeerRef.current.set(participantId, odiserId);
+        if (socketId) {
+          socketIdToParticipantRef.current.set(socketId, participantId);
+          participantToSocketIdRef.current.set(participantId, socketId);
+        }
+        initiateCall(odiserId);
+      });
+    };
+
+    const handleVideoParticipantJoined = (payload: { socketId?: string; odiserId: string; userId?: string }) => {
+      if (!payload?.odiserId) return;
+      const participantId = (payload.userId && payload.userId.trim()) || extractUserIdFromPeer(payload.odiserId);
+      if (!participantId || participantId === user?.id) return;
+      videoPeersRef.current.add(payload.odiserId);
+      peerIdToParticipantRef.current.set(payload.odiserId, participantId);
+      participantToPeerRef.current.set(participantId, payload.odiserId);
+      if (payload.socketId) {
+        socketIdToParticipantRef.current.set(payload.socketId, participantId);
+        participantToSocketIdRef.current.set(participantId, payload.socketId);
+      }
+      initiateCall(payload.odiserId);
+    };
+
+    const handleMediaStateChanged = (payload: { socketId: string; isVideoEnabled: boolean }) => {
+      const participantId = payload?.socketId ? socketIdToParticipantRef.current.get(payload.socketId) : undefined;
+      if (!participantId || participantId === user?.id) return;
+      if (!payload.isVideoEnabled) {
+        const removed = remoteVideoRefs.current.delete(participantId);
+        if (removed) {
+          bumpRemoteStreamsVersion();
+        }
+        return;
+      }
+      const peerId = participantToPeerRef.current.get(participantId);
+      if (peerId) {
+        initiateCall(peerId);
+      }
     };
 
     // Eliminar listeners previos para evitar duplicados
@@ -262,6 +368,9 @@ export default function VideoCall() {
     videoSocket.removeAllListeners('peer-disconnected');
     videoSocket.removeAllListeners('video-error');
     videoSocket.removeAllListeners('force-disconnect');
+    videoSocket.removeAllListeners('room-participants');
+    videoSocket.removeAllListeners('participant-joined');
+    videoSocket.removeAllListeners('media-state-changed');
 
     // Registrar handlers
     socket.on('connect', handleConnect);
@@ -285,13 +394,36 @@ export default function VideoCall() {
     videoSocket.on('peer-disconnected', handlePeerDisconnected);
     videoSocket.on('video-error', handleVideoError);
     videoSocket.on('force-disconnect', handleForceDisconnect);
+    videoSocket.on('room-participants', handleRoomParticipants);
+    videoSocket.on('participant-joined', handleVideoParticipantJoined);
+    videoSocket.on('media-state-changed', handleMediaStateChanged);
 
     const cleanupWebRTC = setupWebRTCHandlers(voiceSocket, peerCallsRef, audioStreamRef);  // Corregido: Pasar audioStreamRef
 
     return () => {
       cleanupWebRTC();
+      videoSocket.off('room-participants', handleRoomParticipants);
+      videoSocket.off('participant-joined', handleVideoParticipantJoined);
+      videoSocket.off('media-state-changed', handleMediaStateChanged);
     };
-  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate]);  // Corregido: Agregar audioStreamRef y videoStreamRef
+  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate, extractUserIdFromPeer, bumpRemoteStreamsVersion]);
+
+  useEffect(() => {
+    if (!videoSocket || !meetingId) return;
+    videoSocket.emit('media-state-change', {
+      roomId: meetingId,
+      isVideoEnabled: cameraOn,
+    });
+  }, [cameraOn, meetingId, videoSocket]);
+
+  useEffect(() => {
+    if (!cameraOn) return;
+    videoPeersRef.current.forEach((peerId) => {
+      if (peerId.endsWith('_video')) {
+        initiateCall(peerId);
+      }
+    });
+  }, [cameraOn, initiateCall]);
 
   // ==================== UI ====================
   const toggleChat = () => {
@@ -347,7 +479,7 @@ export default function VideoCall() {
       voiceSocket.emit('leave-voice-room', { meetingId, peerId: user.id });
     }
     if (user && videoSocket) {
-      videoSocket.emit('leave-video-room', { meetingId, peerId: user.id });
+      videoSocket.emit('leave-video-room', { meetingId, peerId: `${user.id}_video` });
     }
 
     setParticipants([]);
@@ -398,7 +530,7 @@ export default function VideoCall() {
                 )
               ) : (
                 remoteVideoRefs.current.has(p.id) ? (
-                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} />
+                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} version={remoteStreamsVersion} />
                 ) : (
                   <div className="vc-avatar">
                     {p.name.split(' ').map(n => n[0]).join('')}
