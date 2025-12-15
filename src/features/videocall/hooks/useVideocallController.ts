@@ -7,6 +7,9 @@ import { useSockets } from '../services/sockets';
 import { setupWebRTCHandlers } from '../services/webrtc';
 import { Participant, ChatMessage } from '../types';
 
+/**
+ * Handler callbacks exposed by the videocall controller hook.
+ */
 interface VideocallControllerHandlers {
   toggleCamera: () => void;
   toggleMic: () => void;
@@ -19,6 +22,9 @@ interface VideocallControllerHandlers {
   hangup: () => Promise<void>;
 }
 
+/**
+ * Shape of the stateful data returned by the videocall controller hook.
+ */
 interface VideocallController {
   meetingId?: string;
   meetingEnded: boolean;
@@ -38,6 +44,11 @@ interface VideocallController {
   handlers: VideocallControllerHandlers;
 }
 
+/**
+ * Centralized meeting controller that wires together sockets, media streams, participants, and UI state.
+ *
+ * @returns {VideocallController} Aggregated state, refs, and action handlers for the videocall experience.
+ */
 export function useVideocallController(): VideocallController {
   const location = useLocation();
   const navigate = useNavigate();

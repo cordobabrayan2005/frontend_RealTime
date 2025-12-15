@@ -1,5 +1,3 @@
-/* The code you provided is importing various modules and components needed for a React application.
-Here is a breakdown of each import statement: */
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import Login from "./pages/Login";
@@ -14,12 +12,13 @@ import Sitemap from "./components/Sitemap";
 import { api } from "./services/api";
 import Profile from "./pages/Profile";
 import VideoCall from "./pages/Videocall";
-import { useAuthStore } from './stores/authStore';  // Nuevo
+import { useAuthStore } from './stores/authStore';
 import ProtectedRoute from "./components/ProtectedRoute";
 
 /**
- * The `App` function in this TypeScript React component manages authentication state, routing, and
- * rendering different components based on the user's authentication status.
+ * Root application component that mounts the routing shell inside a browser router.
+ *
+ * @returns {JSX.Element} React application entry point.
  */
 export default function App() {
   return (
@@ -30,39 +29,23 @@ export default function App() {
 }
 
 /**
- * Shell component that manages:
- * - Sidebar state (open/close).
- * - Authentication state via `useAuthStore`.
- * - Routing between pages.
- * - Conditional rendering of the sitemap.
- * 
- * @component
- * @returns {JSX.Element} The main application shell with sidebar, routes, and sitemap.
+ * Shell routing layer that renders navigation controls, guarded routes, and layout chrome.
+ *
+ * @returns {JSX.Element} Shell layout for authenticated and public routes.
  */
 function Shell() {
-    /** Sidebar open/close state */
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-    /** React Router navigation hook */
   const navigate = useNavigate();
-
-    /** React Router location hook */
   const location = useLocation();
   
-  // Show sitemap on all pages except the VideoCall route
   const showSitemap = location.pathname !== '/videocall';
-
-    /** Authentication store values and actions */
   const { isAuthed, logout, checkAuth } = useAuthStore();  
 
   /**
-   * Effect hook:
-   * - Verifies authentication on app load.
-   * - Registers a custom `toggleSidebar` event listener.
-   * - Cleans up the event listener on unmount.
+   * Performs initial authentication checks and subscribes to sidebar toggle events.
    */
   useEffect(() => {
-    checkAuth();  // Verify authentication on load
+    checkAuth();
     function onToggle() {
       setSidebarOpen((s) => !s);
     }
@@ -71,23 +54,17 @@ function Shell() {
   }, []);
 
   /**
-   * Closes the sidebar.
-   * 
-   * @function handleClose
-   * @returns {void}
+   * Closes the sidebar if it is currently open.
    */
   function handleClose() {
     setSidebarOpen(false);
   }
 
   /**
-   * Logs out the user, closes the sidebar, and navigates to the login page.
-   * 
-   * @function handleLogout
-   * @returns {void}
+   * Logs out the current user and returns to the login route.
    */
   function handleLogout() {
-    logout();  // Clear auth state
+    logout();
     handleClose();
     navigate("/login");
   }

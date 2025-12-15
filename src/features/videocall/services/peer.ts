@@ -2,10 +2,27 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Peer, { MediaConnection } from 'peerjs';
 import { useAuthStore } from '../../../stores/authStore';
 
+/**
+ * PeerJS media connection extended with an optional control data channel.
+ */
 type PeerCall = MediaConnection & { dataChannel?: RTCDataChannel };
 
+/**
+ * Extracts the user identifier from a compound peer identifier.
+ *
+ * @param {string} peerId PeerJS identifier formatted as `{userId}_{channel}`.
+ * @returns {string} User identifier.
+ */
 const extractUserId = (peerId: string) => peerId.split('_')[0];
 
+/**
+ * Updates the remote stream map for the given peer.
+ *
+ * @param {React.RefObject<Map<string, MediaStream>>} remoteVideoRefs Mutable map that stores remote streams.
+ * @param {string} peerId PeerJS identifier for the connection.
+ * @param {MediaStream | null} stream Latest remote stream or null when removed.
+ * @param {(() => void)=} onRemoteStreamsChanged Optional callback fired when the map mutates.
+ */
 const updateRemoteVideoRef = (
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>,
   peerId: string,
@@ -28,6 +45,13 @@ const updateRemoteVideoRef = (
   }
 };
 
+/**
+ * Wires up PeerJS callbacks so remote video streams keep the local registry in sync.
+ *
+ * @param {PeerCall} call Active PeerJS media connection.
+ * @param {React.RefObject<Map<string, MediaStream>>} remoteVideoRefs Store for participant streams.
+ * @param {(() => void)=} onRemoteStreamsChanged Optional notifier executed after updates.
+ */
 const attachRemoteVideoListeners = (
   call: PeerCall,
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>,
@@ -109,6 +133,22 @@ const attachMuteChannel = (channel: RTCDataChannel, peerId: string) => {
   };
 };
 
+/**
+ * Initializes PeerJS clients for audio and video, handles incoming calls, and exposes helpers for the
+ * meeting lifecycle. Audio and video remain isolated so toggling one does not affect the other.
+ *
+ * @param {string | undefined} meetingId Active meeting identifier.
+ * @param {*} voiceSocket Socket instance for voice signaling.
+ * @param {*} videoSocket Socket instance for video signaling.
+ * @param {React.RefObject<MediaStream | null>} audioStreamRef Reference to the local audio stream.
+ * @param {React.RefObject<MediaStream | null>} videoStreamRef Reference to the local video stream.
+ * @param {boolean} cameraOn Whether the camera toggle is enabled.
+ * @param {boolean} micOn Whether the microphone toggle is enabled.
+ * @param {React.RefObject<Map<string, MediaStream>>} remoteVideoRefs Mutable list of remote streams.
+ * @param {(() => void)=} onRemoteStreamsChanged Optional callback executed after the remote map updates.
+ * @param {number=} videoReadyVersion Bump counter to resync tracks after new permissions.
+ * @returns {object} PeerJS clients, status, and helper callbacks.
+ */
 export function usePeer(
   meetingId: string | undefined,
   voiceSocket: any,
@@ -130,6 +170,11 @@ export function usePeer(
   const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
   const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
+  /**
+   * Retrieves the current outbound camera stream when the local camera toggle is enabled.
+   *
+   * @returns {MediaStream | null} Active camera stream or null when disabled.
+   */
   const getCurrentVideoStream = useCallback(() => {
     if (!cameraOn) {
       return null;
@@ -274,6 +319,11 @@ export function usePeer(
     };
   }, [meetingId, user?.id, videoSocket, cameraOn, videoStreamRef, onRemoteStreamsChanged, remoteVideoRefs, getCurrentVideoStream]);
 
+  /**
+   * Starts a PeerJS call with the specified peer, selecting audio or video based on the identifier.
+   *
+   * @param {string} peerId Remote peer identifier ending in `_voice` or `_video`.
+   */
   const initiateCall = useCallback(async (peerId: string) => {
     if (peerId.endsWith('_voice') && peerVoice) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
@@ -327,6 +377,11 @@ export function usePeer(
     }
   }, [peerVoice, peerVideo, audioStreamRef, getCurrentVideoStream, micOn, remoteVideoRefs, onRemoteStreamsChanged]);
 
+  /**
+   * Convenience wrapper that initiates a voice-only call.
+   *
+   * @param {string} peerId Peer identifier ending in `_voice`.
+   */
   const initiateVoiceCall = useCallback((peerId: string) => {
     if (!peerId.endsWith('_voice')) {
       console.warn('[FRONT] Peer de voz inválido:', peerId);
@@ -335,6 +390,11 @@ export function usePeer(
     void initiateCall(peerId);
   }, [initiateCall]);
 
+  /**
+   * Convenience wrapper that initiates a video-only call.
+   *
+   * @param {string} peerId Peer identifier ending in `_video`.
+   */
   const initiateVideoCall = useCallback((peerId: string) => {
     if (!peerId.endsWith('_video')) {
       console.warn('[FRONT] Peer de video inválido:', peerId);
@@ -343,6 +403,11 @@ export function usePeer(
     void initiateCall(peerId);
   }, [initiateCall]);
 
+  /**
+   * Propagates local camera changes to every active video call, invoking PeerJS helpers when available.
+   *
+   * @param {MediaStream | null} stream Latest local video stream, null when disabled.
+   */
   const syncVideoTrack = useCallback((stream: MediaStream | null) => {
     const activeTrack = stream?.getVideoTracks()[0] ?? null;
     const emptyStream = new MediaStream();
@@ -392,6 +457,11 @@ export function usePeer(
     });
   }, []);
 
+  /**
+   * Broadcasts microphone mute changes to every connected peer via the control data channel.
+   *
+   * @param {boolean} muted Whether the local microphone is muted.
+   */
   const sendMuteToPeers = (muted: boolean) => {
     peerCallsRef.current.forEach((call) => {
       if (call.dataChannel && call.dataChannel.readyState === 'open') {
