@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useMedia } from '../services/media';
@@ -10,9 +10,8 @@ import { setupWebRTCHandlers } from '../services/webrtc';
 interface ParticipantVideoProps {
   participantId: string;
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>;
-  version: number;
 }
-function ParticipantVideo({ participantId, remoteVideoRefs, version }: ParticipantVideoProps) {
+function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const stream = remoteVideoRefs.current.get(participantId);
@@ -20,7 +19,7 @@ function ParticipantVideo({ participantId, remoteVideoRefs, version }: Participa
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(console.error);
     }
-  }, [participantId, remoteVideoRefs, version]);
+  }, [participantId, remoteVideoRefs]);
   return (
     <video
       ref={videoRef}
@@ -42,10 +41,6 @@ export default function VideoCall() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const remoteVideoRefs = useRef(new Map<string, MediaStream>());
-  const [remoteStreamsVersion, setRemoteStreamsVersion] = useState(0);
-  const bumpRemoteStreamsVersion = useCallback(() => {
-    setRemoteStreamsVersion((prev) => prev + 1);
-  }, []);
 
   const {
     audioStreamRef,  // Nuevo: Usar audioStreamRef para voz
@@ -54,8 +49,7 @@ export default function VideoCall() {
     cameraOn,
     setCameraOn,
     micOn,
-    setMicOn,
-    videoReadyVersion
+    setMicOn
   } = useMedia();
 
   const {
@@ -71,19 +65,8 @@ export default function VideoCall() {
     peerVideo,
     peerCallsRef,
     initiateCall,
-    sendMuteToPeers,
-    syncVideoTrack
-  } = usePeer(
-    meetingId,
-    voiceSocket,
-    videoSocket,
-    audioStreamRef,
-    videoStreamRef,
-    cameraOn,
-    micOn,
-    remoteVideoRefs,
-    bumpRemoteStreamsVersion,
-  );
+    sendMuteToPeers
+  } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
 
   const [showCode, setShowCode] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -154,8 +137,6 @@ export default function VideoCall() {
         });
         videoStreamRef.current = null;
       }
-      remoteVideoRefs.current.clear();
-      bumpRemoteStreamsVersion();
       // Destruir peers de voz y video
       try {
         peerVoice?.destroy();
@@ -207,9 +188,6 @@ export default function VideoCall() {
     const handleUserLeft = (data: { userId: string }) => {
       console.log('[FRONT] Usuario salió:', data);
       setParticipants((prev) => prev.filter(p => p.id !== data.userId));
-      if (remoteVideoRefs.current.delete(data.userId)) {
-        bumpRemoteStreamsVersion();
-      }
     };
 
     const handleSocketError = (msg: string) => {
@@ -220,14 +198,14 @@ export default function VideoCall() {
 
     const handleVoiceJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
-      data.peers.forEach((peerId) => {
-        initiateCall(peerId);
+      data.peers.forEach(peerId => {
+        if (micOn) initiateCall(peerId);
       });
     };
 
     const handlePeerJoined = (peerId: string) => {
       console.log('[FRONT] Peer joined voice:', peerId);
-      initiateCall(peerId);
+      if (micOn) initiateCall(peerId);
     };
 
     const handlePeerDisconnected = (peerId: string) => {
@@ -235,12 +213,6 @@ export default function VideoCall() {
       if (pc) {
         pc.close();
         peerCallsRef.current.delete(peerId);
-      }
-      if (peerId.endsWith('_video')) {
-        const userId = peerId.replace(/_video$/i, '');
-        if (remoteVideoRefs.current.delete(userId)) {
-          bumpRemoteStreamsVersion();
-        }
       }
     };
 
@@ -252,14 +224,14 @@ export default function VideoCall() {
 
     const handleVideoJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
-      data.peers.forEach((peerId) => {
-        initiateCall(peerId);
+      data.peers.forEach(peerId => {
+        if (cameraOn) initiateCall(peerId);
       });
     };
 
     const handlePeerJoinedVideo = (peerId: string) => {
       console.log('[FRONT] Peer joined video:', peerId);
-      initiateCall(peerId);
+      if (cameraOn) initiateCall(peerId);
     };
 
     const handleVideoError = (msg: string) => {
@@ -319,25 +291,7 @@ export default function VideoCall() {
     return () => {
       cleanupWebRTC();
     };
-  }, [socket, voiceSocket, videoSocket, user, meetingId, audioStreamRef, videoStreamRef, initiateCall, bumpRemoteStreamsVersion, navigate]);
-
-  useEffect(() => {
-    const stream = cameraOn ? videoStreamRef.current : null;
-    syncVideoTrack(stream ?? null);
-
-    if (!cameraOn) {
-      return;
-    }
-
-    participants.forEach((participant) => {
-      if (participant.isLocal) {
-        return;
-      }
-      if (!remoteVideoRefs.current.has(participant.id)) {
-        initiateCall(`${participant.id}_video`);
-      }
-    });
-  }, [cameraOn, videoReadyVersion, participants, syncVideoTrack, initiateCall]);
+  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate]);  // Corregido: Agregar audioStreamRef y videoStreamRef
 
   // ==================== UI ====================
   const toggleChat = () => {
@@ -396,8 +350,6 @@ export default function VideoCall() {
       videoSocket.emit('leave-video-room', { meetingId, peerId: user.id });
     }
 
-    remoteVideoRefs.current.clear();
-    bumpRemoteStreamsVersion();
     setParticipants([]);
     setShowChat(false);
     navigate('/realtime');
@@ -446,7 +398,7 @@ export default function VideoCall() {
                 )
               ) : (
                 remoteVideoRefs.current.has(p.id) ? (
-                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} version={remoteStreamsVersion} />
+                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} />
                 ) : (
                   <div className="vc-avatar">
                     {p.name.split(' ').map(n => n[0]).join('')}
