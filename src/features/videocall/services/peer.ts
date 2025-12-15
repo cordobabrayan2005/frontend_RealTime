@@ -6,6 +6,78 @@ type PeerCall = MediaConnection & { dataChannel?: RTCDataChannel };
 
 const extractUserId = (peerId: string) => peerId.split('_')[0];
 
+const updateRemoteVideoRef = (
+  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>,
+  peerId: string,
+  stream: MediaStream | null,
+  onRemoteStreamsChanged?: () => void
+) => {
+  const participantId = extractUserId(peerId);
+  if (!participantId) {
+    return;
+  }
+
+  if (stream) {
+    remoteVideoRefs.current.set(participantId, stream);
+    onRemoteStreamsChanged?.();
+    return;
+  }
+
+  if (remoteVideoRefs.current.delete(participantId)) {
+    onRemoteStreamsChanged?.();
+  }
+};
+
+const attachRemoteVideoListeners = (
+  call: PeerCall,
+  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>,
+  onRemoteStreamsChanged?: () => void
+) => {
+  const updateStream = (stream: MediaStream | null) => {
+    updateRemoteVideoRef(remoteVideoRefs, call.peer, stream, onRemoteStreamsChanged);
+  };
+
+  call.on('stream', (remoteStream: MediaStream) => {
+    updateStream(remoteStream);
+  });
+
+  call.on('close', () => {
+    updateStream(null);
+  });
+
+  const peerConnection = call.peerConnection as RTCPeerConnection | undefined;
+  if (!peerConnection) {
+    return;
+  }
+
+  const handleTrack = (event: RTCTrackEvent) => {
+    if (event.track.kind !== 'video') {
+      return;
+    }
+
+    const stream = event.streams?.[0];
+    if (stream) {
+      updateStream(stream);
+    } else {
+      const syntheticStream = new MediaStream([event.track]);
+      updateStream(syntheticStream);
+    }
+
+    const handleTrackEnded = () => {
+      updateStream(null);
+      event.track.removeEventListener('ended', handleTrackEnded);
+    };
+
+    event.track.addEventListener('ended', handleTrackEnded);
+  };
+
+  peerConnection.addEventListener('track', handleTrack);
+
+  call.on('close', () => {
+    peerConnection.removeEventListener('track', handleTrack);
+  });
+};
+
 const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
   let audio = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
   if (!audio) {
@@ -178,18 +250,7 @@ export function usePeer(
         call.answer();
       }
 
-      call.on('stream', (remoteStream: MediaStream) => {
-        const participantId = extractUserId(call.peer);
-        remoteVideoRefs.current.set(participantId, remoteStream);
-        onRemoteStreamsChanged?.();
-      });
-
-      call.on('close', () => {
-        const participantId = extractUserId(call.peer);
-        if (remoteVideoRefs.current.delete(participantId)) {
-          onRemoteStreamsChanged?.();
-        }
-      });
+      attachRemoteVideoListeners(call as PeerCall, remoteVideoRefs, onRemoteStreamsChanged);
 
       call.on('error', (error) => {
         console.error('[FRONT] Error en llamada de video:', error);
@@ -253,18 +314,7 @@ export function usePeer(
       const call = peerVideo.call(peerId, outboundStream ?? new MediaStream());
       peerCallsRef.current.set(peerId, call as PeerCall);
 
-      call.on('stream', (remoteStream: MediaStream) => {
-        const participantId = extractUserId(peerId);
-        remoteVideoRefs.current.set(participantId, remoteStream);
-        onRemoteStreamsChanged?.();
-      });
-
-      call.on('close', () => {
-        const participantId = extractUserId(peerId);
-        if (remoteVideoRefs.current.delete(participantId)) {
-          onRemoteStreamsChanged?.();
-        }
-      });
+      attachRemoteVideoListeners(call as PeerCall, remoteVideoRefs, onRemoteStreamsChanged);
 
       call.on('error', (error) => {
         console.error('[FRONT] Error en llamada de video saliente:', error);
