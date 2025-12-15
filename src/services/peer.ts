@@ -88,12 +88,13 @@ export function usePeer(
         peerCallsRef.current.delete(call.peer);
       }
 
-      const outboundStream = audioStreamRef.current ?? undefined;
-      if (outboundStream) {
-        call.answer(outboundStream);
-      } else {
-        call.answer();
+      const outboundStream = audioStreamRef.current;
+      if (!outboundStream) {
+        console.log('[FRONT] Postergando llamada de voz, stream local no disponible');
+        return;
       }
+
+      call.answer(outboundStream);
 
       call.on('stream', (remoteStream: MediaStream) => {
         ensureRemoteAudioElement(call.peer, remoteStream);
@@ -213,8 +214,12 @@ export function usePeer(
   const initiateCall = async (peerId: string) => {
     if (peerId.endsWith('_voice') && peerVoice) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
-      const outboundStream = audioStreamRef.current ?? undefined;
-      const call = outboundStream ? peerVoice.call(peerId, outboundStream) : peerVoice.call(peerId);
+      const outboundStream = audioStreamRef.current;
+      if (!outboundStream) {
+        console.warn('[FRONT] No se pudo iniciar llamada de voz, stream local no disponible');
+        return;
+      }
+      const call = peerVoice.call(peerId, outboundStream);
       peerCallsRef.current.set(peerId, call as PeerCall);
 
       call.on('stream', (remoteStream) => {
