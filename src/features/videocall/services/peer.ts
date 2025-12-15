@@ -31,8 +31,7 @@ const updateRemoteVideoRef = (
 const attachRemoteVideoListeners = (
   call: PeerCall,
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>,
-  onRemoteStreamsChanged: (() => void) | undefined,
-  videoSendersRef: React.MutableRefObject<WeakMap<RTCPeerConnection, RTCRtpSender[]>>
+  onRemoteStreamsChanged?: () => void
 ) => {
   const updateStream = (stream: MediaStream | null) => {
     updateRemoteVideoRef(remoteVideoRefs, call.peer, stream, onRemoteStreamsChanged);
@@ -50,8 +49,6 @@ const attachRemoteVideoListeners = (
   if (!peerConnection) {
     return;
   }
-
-  ensureVideoSenders(peerConnection, videoSendersRef);
 
   const handleTrack = (event: RTCTrackEvent) => {
     if (event.track.kind !== 'video') {
@@ -78,78 +75,7 @@ const attachRemoteVideoListeners = (
 
   call.on('close', () => {
     peerConnection.removeEventListener('track', handleTrack);
-    videoSendersRef.current.delete(peerConnection);
   });
-};
-
-const createPlaceholderTrack = () => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  const context = canvas.getContext('2d');
-  context?.fillRect(0, 0, 1, 1);
-  const stream = canvas.captureStream?.();
-  const track = stream?.getVideoTracks?.()[0] ?? null;
-  if (track) {
-    track.enabled = false;
-  }
-  return track;
-};
-
-const createPlaceholderStream = () => {
-  const track = createPlaceholderTrack();
-  if (!track) {
-    return null;
-  }
-  const stream = new MediaStream([track]);
-  return stream;
-};
-
-const ensureVideoSenders = (
-  connection: RTCPeerConnection,
-  videoSendersRef: React.MutableRefObject<WeakMap<RTCPeerConnection, RTCRtpSender[]>>
-): RTCRtpSender[] => {
-  const stored = videoSendersRef.current.get(connection)?.filter(Boolean) ?? [];
-  if (stored.length > 0) {
-    return stored;
-  }
-
-  const current = typeof connection.getSenders === 'function'
-    ? connection.getSenders().filter((sender) => sender.track?.kind === 'video')
-    : [];
-
-  if (current.length > 0) {
-    videoSendersRef.current.set(connection, current);
-    return current;
-  }
-
-  if (typeof connection.addTransceiver === 'function') {
-    try {
-      const transceiver = connection.addTransceiver('video', { direction: 'sendonly' });
-      if (transceiver?.sender) {
-        const senders = [transceiver.sender];
-        videoSendersRef.current.set(connection, senders);
-        return senders;
-      }
-    } catch (error) {
-      console.warn('[FRONT] Error creando transceptor de video:', error);
-    }
-  }
-
-  const placeholderTrack = createPlaceholderTrack();
-  if (placeholderTrack && typeof connection.addTrack === 'function') {
-    try {
-      const placeholderStream = new MediaStream([placeholderTrack]);
-      const sender = connection.addTrack(placeholderTrack, placeholderStream);
-      const senders = sender ? [sender] : [];
-      videoSendersRef.current.set(connection, senders);
-      return senders;
-    } catch (error) {
-      console.warn('[FRONT] Error agregando track de marcador de video:', error);
-    }
-  }
-
-  return [];
 };
 
 const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
@@ -200,10 +126,16 @@ export function usePeer(
   const [peerVideo, setPeerVideo] = useState<Peer | null>(null);
   const [peerStatus, setPeerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const peerCallsRef = useRef<Map<string, PeerCall>>(new Map());
-  const videoSendersRef = useRef<WeakMap<RTCPeerConnection, RTCRtpSender[]>>(new WeakMap());
 
   const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
   const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
+
+  const getCurrentVideoStream = useCallback(() => {
+    if (!cameraOn) {
+      return null;
+    }
+    return videoStreamRef.current ?? null;
+  }, [cameraOn, videoStreamRef]);
 
   useEffect(() => {
     if (!meetingId || !user || !voiceSocket) return;
@@ -318,14 +250,10 @@ export function usePeer(
         peerCallsRef.current.delete(call.peer);
       }
 
-      const outboundStream = cameraOn && videoStreamRef.current ? videoStreamRef.current : createPlaceholderStream();
-      if (outboundStream) {
-        call.answer(outboundStream);
-      } else {
-        call.answer();
-      }
+      const outboundStream = getCurrentVideoStream();
+      call.answer(outboundStream ?? new MediaStream());
 
-      attachRemoteVideoListeners(call as PeerCall, remoteVideoRefs, onRemoteStreamsChanged, videoSendersRef);
+      attachRemoteVideoListeners(call as PeerCall, remoteVideoRefs, onRemoteStreamsChanged);
 
       call.on('error', (error) => {
         console.error('[FRONT] Error en llamada de video:', error);
@@ -344,7 +272,7 @@ export function usePeer(
     return () => {
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, videoSocket, cameraOn, videoStreamRef, onRemoteStreamsChanged, remoteVideoRefs]);
+  }, [meetingId, user?.id, videoSocket, cameraOn, videoStreamRef, onRemoteStreamsChanged, remoteVideoRefs, getCurrentVideoStream]);
 
   const initiateCall = useCallback(async (peerId: string) => {
     if (peerId.endsWith('_voice') && peerVoice) {
@@ -385,12 +313,11 @@ export function usePeer(
       }
     } else if (peerId.endsWith('_video') && peerVideo) {
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
-      const outboundStream = cameraOn && videoStreamRef.current ? videoStreamRef.current : null;
-      const placeholderStream = outboundStream ? null : createPlaceholderStream();
-      const call = peerVideo.call(peerId, outboundStream ?? placeholderStream ?? new MediaStream());
+      const outboundStream = getCurrentVideoStream();
+      const call = peerVideo.call(peerId, outboundStream ?? new MediaStream());
       peerCallsRef.current.set(peerId, call as PeerCall);
 
-      attachRemoteVideoListeners(call as PeerCall, remoteVideoRefs, onRemoteStreamsChanged, videoSendersRef);
+      attachRemoteVideoListeners(call as PeerCall, remoteVideoRefs, onRemoteStreamsChanged);
 
       call.on('error', (error) => {
         console.error('[FRONT] Error en llamada de video saliente:', error);
@@ -398,7 +325,7 @@ export function usePeer(
     } else {
       console.log('[FRONT] No se pudo iniciar la llamada, instancia Peer no lista');
     }
-  }, [peerVoice, peerVideo, audioStreamRef, cameraOn, videoStreamRef, micOn, remoteVideoRefs, onRemoteStreamsChanged, videoSendersRef]);
+  }, [peerVoice, peerVideo, audioStreamRef, getCurrentVideoStream, micOn, remoteVideoRefs, onRemoteStreamsChanged]);
 
   const initiateVoiceCall = useCallback((peerId: string) => {
     if (!peerId.endsWith('_voice')) {
@@ -417,53 +344,53 @@ export function usePeer(
   }, [initiateCall]);
 
   const syncVideoTrack = useCallback((stream: MediaStream | null) => {
-    const track = stream?.getVideoTracks()[0] ?? null;
+    const activeTrack = stream?.getVideoTracks()[0] ?? null;
+    const emptyStream = new MediaStream();
 
     peerCallsRef.current.forEach((call, peerId) => {
       if (!peerId.endsWith('_video')) {
         return;
       }
 
-      const connection = call.peerConnection as RTCPeerConnection | undefined;
-      if (!connection) {
-        return;
-      }
+      const candidateStream = activeTrack ? stream! : emptyStream;
+      const replace = (call as MediaConnection & { replaceStream?: (value: MediaStream) => void }).replaceStream;
 
-      let senders = ensureVideoSenders(connection, videoSendersRef);
-
-      if (track && stream && senders.length === 0 && typeof connection.addTrack === 'function') {
+      if (typeof replace === 'function') {
         try {
-          const sender = connection.addTrack(track, stream);
-          senders = sender ? [sender] : [];
-          if (senders.length > 0) {
-            videoSendersRef.current.set(connection, senders);
-          }
+          replace(candidateStream);
         } catch (error) {
-          console.warn('[FRONT] Error agregando track de video como respaldo:', error);
+          console.warn('[FRONT] Error reemplazando stream de video (PeerJS):', error);
         }
-      }
-
-      if (senders.length === 0) {
-        console.warn('[FRONT] No hay emisores de video disponibles para sincronizar.');
         return;
       }
 
-      if (track) {
-        senders.forEach((sender) => {
-          sender.replaceTrack(track).catch((error) => {
-            console.warn('[FRONT] Error reemplazando track de video:', error);
+      const connection = call.peerConnection as RTCPeerConnection | undefined;
+      if (!connection || typeof connection.getSenders !== 'function') {
+        return;
+      }
+
+      const videoSenders = connection.getSenders().filter((sender) => sender.track?.kind === 'video');
+
+      if (videoSenders.length === 0) {
+        if (activeTrack && typeof connection.addTrack === 'function') {
+          try {
+            connection.addTrack(activeTrack, stream!);
+          } catch (error) {
+            console.warn('[FRONT] Error agregando track de video como respaldo:', error);
+          }
+        }
+        return;
+      }
+
+      videoSenders.forEach((sender) => {
+        sender
+          .replaceTrack(activeTrack)
+          .catch((error) => {
+            console.warn('[FRONT] Error actualizando track de video:', error);
           });
-        });
-        return;
-      }
-
-      senders.forEach((sender) => {
-        sender.replaceTrack(null).catch((error) => {
-          console.warn('[FRONT] Error deteniendo track de video:', error);
-        });
       });
     });
-  }, [videoSendersRef]);
+  }, []);
 
   const sendMuteToPeers = (muted: boolean) => {
     peerCallsRef.current.forEach((call) => {
@@ -474,9 +401,9 @@ export function usePeer(
   };
 
   useEffect(() => {
-    const stream = cameraOn && videoStreamRef.current ? videoStreamRef.current : null;
+    const stream = getCurrentVideoStream();
     syncVideoTrack(stream);
-  }, [cameraOn, videoReadyVersion, videoStreamRef, syncVideoTrack]);
+  }, [cameraOn, videoReadyVersion, getCurrentVideoStream, syncVideoTrack]);
 
   return {
     peerVoice,

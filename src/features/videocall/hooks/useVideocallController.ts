@@ -431,6 +431,15 @@ export function useVideocallController(): VideocallController {
       if (!remoteVideoRefs.current.has(participantId)) {
         const peerId = participantToVideoPeerRef.current.get(participantId);
         if (peerId) {
+          const existingCall = peerCallsRef.current.get(peerId);
+          if (existingCall) {
+            try {
+              existingCall.close();
+            } catch {
+              /* ignore */
+            }
+            peerCallsRef.current.delete(peerId);
+          }
           initiateVideoCall(peerId);
         }
       }
@@ -540,13 +549,7 @@ export function useVideocallController(): VideocallController {
   useEffect(() => {
     const stream = cameraOn ? videoStreamRef.current : null;
     syncVideoTrack(stream ?? null);
-
-    if (cameraOn && stream) {
-      videoPeersRef.current.forEach((peerId) => {
-        initiateVideoCall(peerId);
-      });
-    }
-  }, [cameraOn, videoReadyVersion, syncVideoTrack, initiateVideoCall, videoStreamRef]);
+  }, [cameraOn, videoReadyVersion, syncVideoTrack, videoStreamRef]);
 
   useEffect(() => {
     if (!videoSocket || !meetingId) {
