@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useMedia } from '../services/media';
@@ -10,9 +10,8 @@ import { setupWebRTCHandlers } from '../services/webrtc';
 interface ParticipantVideoProps {
   participantId: string;
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>;
-  version: number;
 }
-function ParticipantVideo({ participantId, remoteVideoRefs, version }: ParticipantVideoProps) {
+function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const stream = remoteVideoRefs.current.get(participantId);
@@ -20,7 +19,7 @@ function ParticipantVideo({ participantId, remoteVideoRefs, version }: Participa
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(console.error);
     }
-  }, [participantId, remoteVideoRefs, version]);
+  }, [participantId, remoteVideoRefs]);
   return (
     <video
       ref={videoRef}
@@ -42,10 +41,6 @@ export default function VideoCall() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const remoteVideoRefs = useRef(new Map<string, MediaStream>());
-  const [remoteStreamsVersion, setRemoteStreamsVersion] = useState(0);
-  const bumpRemoteStreamsVersion = useCallback(() => {
-    setRemoteStreamsVersion((prev) => prev + 1);
-  }, []);
 
   const {
     audioStreamRef,  // Nuevo: Usar audioStreamRef para voz
@@ -54,8 +49,7 @@ export default function VideoCall() {
     cameraOn,
     setCameraOn,
     micOn,
-    setMicOn,
-    videoReadyVersion
+    setMicOn
   } = useMedia();
 
   const {
@@ -72,18 +66,7 @@ export default function VideoCall() {
     peerCallsRef,
     initiateCall,
     sendMuteToPeers
-  } = usePeer(
-    meetingId,
-    voiceSocket,
-    videoSocket,
-    audioStreamRef,
-    videoStreamRef,
-    cameraOn,
-    micOn,
-    remoteVideoRefs,
-    bumpRemoteStreamsVersion,
-    videoReadyVersion
-  );
+  } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
 
   const [showCode, setShowCode] = useState(false);
   const [meetingEnded, setMeetingEnded] = useState(false);
@@ -154,10 +137,6 @@ export default function VideoCall() {
         });
         videoStreamRef.current = null;
       }
-      if (remoteVideoRefs.current.size > 0) {
-        remoteVideoRefs.current.clear();
-        bumpRemoteStreamsVersion();
-      }
       // Destruir peers de voz y video
       try {
         peerVoice?.destroy();
@@ -208,9 +187,6 @@ export default function VideoCall() {
 
     const handleUserLeft = (data: { userId: string }) => {
       console.log('[FRONT] Usuario salió:', data);
-      if (remoteVideoRefs.current.delete(data.userId)) {
-        bumpRemoteStreamsVersion();
-      }
       setParticipants((prev) => prev.filter(p => p.id !== data.userId));
     };
 
@@ -237,12 +213,6 @@ export default function VideoCall() {
       if (pc) {
         pc.close();
         peerCallsRef.current.delete(peerId);
-      }
-      if (peerId.endsWith('_video')) {
-        const userId = peerId.split('_')[0];
-        if (remoteVideoRefs.current.delete(userId)) {
-          bumpRemoteStreamsVersion();
-        }
       }
     };
 
@@ -321,7 +291,7 @@ export default function VideoCall() {
     return () => {
       cleanupWebRTC();
     };
-  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate, bumpRemoteStreamsVersion]);
+  }, [socket, voiceSocket, videoSocket, user, meetingId, micOn, cameraOn, audioStreamRef, videoStreamRef, initiateCall, navigate]);  // Corregido: Agregar audioStreamRef y videoStreamRef
 
   // ==================== UI ====================
   const toggleChat = () => {
@@ -380,10 +350,6 @@ export default function VideoCall() {
       videoSocket.emit('leave-video-room', { meetingId, peerId: user.id });
     }
 
-    if (remoteVideoRefs.current.size > 0) {
-      remoteVideoRefs.current.clear();
-      bumpRemoteStreamsVersion();
-    }
     setParticipants([]);
     setShowChat(false);
     navigate('/realtime');
@@ -432,7 +398,7 @@ export default function VideoCall() {
                 )
               ) : (
                 remoteVideoRefs.current.has(p.id) ? (
-                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} version={remoteStreamsVersion} />
+                  <ParticipantVideo participantId={p.id} remoteVideoRefs={remoteVideoRefs} />
                 ) : (
                   <div className="vc-avatar">
                     {p.name.split(' ').map(n => n[0]).join('')}

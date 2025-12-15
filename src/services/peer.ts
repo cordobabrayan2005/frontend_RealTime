@@ -1,66 +1,31 @@
 import { useState, useEffect, useRef } from 'react';
-import Peer, { MediaConnection } from 'peerjs';
+import Peer from 'peerjs';
 import { useAuthStore } from '../stores/authStore';
-
-type PeerCall = MediaConnection & { dataChannel?: RTCDataChannel };
-
-const extractUserId = (peerId: string) => peerId.split('_')[0];
-
-const ensureRemoteAudioElement = (peerId: string, stream: MediaStream) => {
-  let audio = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
-  if (!audio) {
-    audio = document.createElement('audio');
-    audio.setAttribute('data-peer', peerId);
-    audio.autoplay = true;
-    audio.setAttribute('playsinline', 'true');
-    audio.volume = 1;
-    audio.muted = false;
-    document.body.appendChild(audio);
-  }
-  audio.srcObject = stream;
-  audio.play().catch((error) => console.warn('[FRONT] Autoplay audio:', error));
-};
-
-const attachMuteChannel = (channel: RTCDataChannel, peerId: string) => {
-  channel.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data?.type === 'mute') {
-        const audioElement = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement | null;
-        if (audioElement) {
-          audioElement.muted = data.muted;
-        }
-      }
-    } catch (error) {
-      console.warn('[FRONT] Error procesando mensaje de mute:', error);
-    }
-  };
-};
 
 export function usePeer(
   meetingId: string | undefined,
   voiceSocket: any,
   videoSocket: any,
-  audioStreamRef: React.RefObject<MediaStream | null>,
-  videoStreamRef: React.RefObject<MediaStream | null>,
+  audioStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar audioStreamRef
+  videoStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar videoStreamRef
   cameraOn: boolean,
   micOn: boolean,
-  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>,
-  onRemoteStreamsChanged?: () => void,
-  videoReadyVersion?: number
+  remoteVideoRefs: React.RefObject<Map<string, MediaStream>>
 ) {
   const { user } = useAuthStore();
   const [peerVoice, setPeerVoice] = useState<Peer | null>(null);
   const [peerVideo, setPeerVideo] = useState<Peer | null>(null);
   const [peerStatus, setPeerStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
-  const peerCallsRef = useRef<Map<string, PeerCall>>(new Map());
+  const peerCallsRef = useRef<Map<string, any>>(new Map());
 
   const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
   const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
+  // ==================== PEER DE VOZ (PERSISTENTE) ====================
   useEffect(() => {
-    if (!meetingId || !user || !voiceSocket) return;
+    if (!meetingId || !user || !voiceSocket) return;  // No depende de micOn
 
+    console.log('[FRONT] Inicializando Peer de voz...');
     const newPeerVoice = new Peer(`${user.id}_voice`, {
       host: PEERJS_HOST_VOICE,
       path: '/',
@@ -73,78 +38,67 @@ export function usePeer(
     newPeerVoice.on('open', (id) => {
       console.log('[FRONT] ✅ Peer voz conectado:', id);
       setPeerStatus('connected');
-      voiceSocket.emit('join-voice-room', { meetingId, peerId: newPeerVoice.id, userId: user.id });
+      voiceSocket.emit('join-voice-room', { meetingId, peerId: `${user.id}_voice`, userId: user.id });
     });
 
     newPeerVoice.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de voz de:', call.peer);
-      const existingCall = peerCallsRef.current.get(call.peer);
-      if (existingCall && existingCall !== call) {
-        try {
-          existingCall.close();
-        } catch (error) {
-          console.warn('[FRONT] Error cerrando llamada de voz previa:', error);
-        }
-        peerCallsRef.current.delete(call.peer);
-      }
-
-      const outboundStream = audioStreamRef.current;
-      if (!outboundStream) {
-        console.log('[FRONT] Postergando llamada de voz, stream local no disponible');
-        return;
-      }
-
-      call.answer(outboundStream);
-
-      call.on('stream', (remoteStream: MediaStream) => {
-        ensureRemoteAudioElement(call.peer, remoteStream);
-      });
-
-      if (call.peerConnection) {
-        call.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
-          attachMuteChannel(event.channel, call.peer);
+      if (audioStreamRef.current && micOn) {
+        call.answer(audioStreamRef.current);
+        call.on('stream', (remoteStream) => {
+          console.log('[FRONT] Stream de voz recibido de:', call.peer);
+          const audio = document.createElement('audio');
+          audio.srcObject = remoteStream;
+          audio.autoplay = true;
+          audio.setAttribute('playsinline', 'true');
+          audio.play().catch(err => console.error('Autoplay audio:', err));
+        });
+        // Crear DataChannel para mute
+        const dataChannel = call.peerConnection.createDataChannel('mute-channel');
+        dataChannel.onopen = () => {
+          console.log('[FRONT] DataChannel abierto para mute con:', call.peer);
+          // Enviar estado inicial de mute
+          dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
         };
-        try {
-          const dataChannel = call.peerConnection.createDataChannel('mute-channel');
-          dataChannel.onopen = () => {
-            dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
-          };
-          attachMuteChannel(dataChannel, call.peer);
-          (call as PeerCall).dataChannel = dataChannel;
-        } catch (error) {
-          console.warn('[FRONT] Error creando DataChannel de mute (entrante):', error);
-        }
+        dataChannel.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'mute') {
+            // Mutear/desmutear el audio remoto localmente
+            const audioElement = document.querySelector(`audio[data-peer="${call.peer}"]`) as HTMLAudioElement;
+            if (audioElement) {
+              audioElement.muted = data.muted;
+            }
+          }
+        };
+        // Guardar DataChannel en el call
+        call.dataChannel = dataChannel;
+      } else {
+        console.log('[FRONT] Rechazando llamada de voz - mic apagado');
+        call.close();
       }
-
-      call.on('close', () => {
-        const audioElement = document.querySelector(`audio[data-peer="${call.peer}"]`);
-        if (audioElement) {
-          audioElement.remove();
-        }
-      });
-
-      call.on('error', (error) => {
-        console.error('[FRONT] Error en llamada de voz:', error);
-      });
-
-      peerCallsRef.current.set(call.peer, call as PeerCall);
+      call.on('close', () => console.log('[FRONT] Llamada de voz cerrada'));
+      call.on('error', (err) => console.error('[FRONT] Error en llamada de voz:', err));
+      peerCallsRef.current.set(call.peer, call);
     });
 
-    newPeerVoice.on('error', (error) => {
-      console.error('[FRONT] Error Peer voz:', error);
+    newPeerVoice.on('error', (err) => {
+      console.error('[FRONT] Error Peer voz:', err);
       setPeerStatus('error');
     });
 
     setPeerVoice(newPeerVoice);
 
     return () => {
+      console.log('[FRONT] Cleanup: destruyendo peer voz');
       newPeerVoice.destroy();
     };
-  }, [meetingId, user?.id, voiceSocket, micOn, audioStreamRef]);
+  }, [meetingId, user?.id, voiceSocket]);  // Sin micOn
 
+  // ==================== PEER DE VIDEO (PERSISTENTE) ====================
   useEffect(() => {
-    if (!meetingId || !user || !videoSocket) return;
+    if (!meetingId || !user || !videoSocket) return;  // No depende de cameraOn
 
+    console.log('[FRONT] Inicializando Peer de video...');
     const newPeerVideo = new Peer(`${user.id}_video`, {
       host: PEERJS_HOST_VIDEO,
       path: '/',
@@ -157,128 +111,92 @@ export function usePeer(
     newPeerVideo.on('open', (id) => {
       console.log('[FRONT] ✅ Peer video conectado:', id);
       setPeerStatus('connected');
-      videoSocket.emit('join-video-room', { meetingId, peerId: newPeerVideo.id, userId: user.id });
+      videoSocket.emit('join-video-room', { meetingId, peerId: `${user.id}_video`, userId: user.id });
     });
 
     newPeerVideo.on('call', (call) => {
       console.log('[FRONT] Contestando llamada de video de:', call.peer);
-      const existingCall = peerCallsRef.current.get(call.peer);
-      if (existingCall && existingCall !== call) {
-        try {
-          existingCall.close();
-        } catch (error) {
-          console.warn('[FRONT] Error cerrando llamada de video previa:', error);
-        }
-        peerCallsRef.current.delete(call.peer);
-      }
-
-      const outboundStream = cameraOn && videoStreamRef.current ? videoStreamRef.current : undefined;
-      if (outboundStream) {
-        call.answer(outboundStream);
+      if (videoStreamRef.current && cameraOn) {
+        call.answer(videoStreamRef.current);
+        call.on('stream', (remoteStream) => {
+          console.log('[FRONT] Stream de video recibido de:', call.peer);
+          const userId = call.peer.split('_')[0];
+          remoteVideoRefs.current.set(userId, remoteStream);
+          const video = document.createElement('video');
+          video.srcObject = remoteStream;
+          video.autoplay = true;
+          video.setAttribute('playsinline', 'true');
+          video.muted = false;
+          video.play().catch(err => console.error('Autoplay video:', err));
+        });
       } else {
-        call.answer();
+        console.log('[FRONT] Rechazando llamada de video - cámara apagada');
+        call.close();
       }
-
-      call.on('stream', (remoteStream: MediaStream) => {
-        const participantId = extractUserId(call.peer);
-        remoteVideoRefs.current.set(participantId, remoteStream);
-        onRemoteStreamsChanged?.();
-      });
-
       call.on('close', () => {
-        const participantId = extractUserId(call.peer);
-        if (remoteVideoRefs.current.delete(participantId)) {
-          onRemoteStreamsChanged?.();
-        }
+        console.log('[FRONT] Llamada de video cerrada');
+        const userId = call.peer.split('_')[0];
+        remoteVideoRefs.current.delete(userId);
       });
-
-      call.on('error', (error) => {
-        console.error('[FRONT] Error en llamada de video:', error);
-      });
-
-      peerCallsRef.current.set(call.peer, call as PeerCall);
+      call.on('error', (err) => console.error('[FRONT] Error en llamada de video:', err));
+      peerCallsRef.current.set(call.peer, call);
     });
 
-    newPeerVideo.on('error', (error) => {
-      console.error('[FRONT] Error Peer video:', error);
+    newPeerVideo.on('error', (err) => {
+      console.error('[FRONT] Error Peer video:', err);
       setPeerStatus('error');
     });
 
     setPeerVideo(newPeerVideo);
 
     return () => {
+      console.log('[FRONT] Cleanup: destruyendo peer video');
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, videoSocket, cameraOn, videoStreamRef, onRemoteStreamsChanged, remoteVideoRefs]);
+  }, [meetingId, user?.id, videoSocket]);  // Sin cameraOn
 
+  // ==================== INICIAR LLAMADAS ====================
   const initiateCall = async (peerId: string) => {
-    if (peerId.endsWith('_voice') && peerVoice) {
+    if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
-      const outboundStream = audioStreamRef.current;
-      if (!outboundStream) {
-        console.warn('[FRONT] No se pudo iniciar llamada de voz, stream local no disponible');
-        return;
-      }
-      const call = peerVoice.call(peerId, outboundStream);
-      peerCallsRef.current.set(peerId, call as PeerCall);
+      const callVoice = peerVoice.call(peerId, audioStreamRef.current);
+      peerCallsRef.current.set(peerId, callVoice);
 
-      call.on('stream', (remoteStream) => {
-        ensureRemoteAudioElement(peerId, remoteStream);
+      // Manejar DataChannel en llamada iniciada
+      callVoice.on('stream', (remoteStream) => {
+        console.log('[FRONT] Stream de voz recibido de:', peerId);
+        const audio = document.createElement('audio');
+        audio.srcObject = remoteStream;
+        audio.setAttribute('data-peer', peerId);  // Para identificar
+        audio.autoplay = true;
+        audio.setAttribute('playsinline', 'true');
+        audio.play().catch(err => console.error('Autoplay audio:', err));
       });
 
-      call.on('close', () => {
-        const audioElement = document.querySelector(`audio[data-peer="${peerId}"]`);
-        if (audioElement) {
-          audioElement.remove();
-        }
-      });
-
-      call.on('error', (error) => {
-        console.error('[FRONT] Error en llamada de voz saliente:', error);
-      });
-
-      if (call.peerConnection) {
-        call.peerConnection.ondatachannel = (event: RTCDataChannelEvent) => {
-          attachMuteChannel(event.channel, peerId);
+      // Escuchar DataChannel
+      callVoice.peerConnection.ondatachannel = (event) => {
+        const dataChannel = event.channel;
+        dataChannel.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'mute') {
+            const audioElement = document.querySelector(`audio[data-peer="${peerId}"]`) as HTMLAudioElement;
+            if (audioElement) {
+              audioElement.muted = data.muted;
+            }
+          }
         };
-        try {
-          const dataChannel = call.peerConnection.createDataChannel('mute-channel');
-          dataChannel.onopen = () => {
-            dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
-          };
-          attachMuteChannel(dataChannel, peerId);
-          (call as PeerCall).dataChannel = dataChannel;
-        } catch (error) {
-          console.warn('[FRONT] Error creando DataChannel de mute (saliente):', error);
-        }
-      }
-    } else if (peerId.endsWith('_video') && peerVideo) {
+      };
+    } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {
+      // Video sin cambios
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
-      const outboundStream = cameraOn && videoStreamRef.current ? videoStreamRef.current : undefined;
-      const call = outboundStream ? peerVideo.call(peerId, outboundStream) : peerVideo.call(peerId);
-      peerCallsRef.current.set(peerId, call as PeerCall);
-
-      call.on('stream', (remoteStream: MediaStream) => {
-        const participantId = extractUserId(peerId);
-        remoteVideoRefs.current.set(participantId, remoteStream);
-        onRemoteStreamsChanged?.();
-      });
-
-      call.on('close', () => {
-        const participantId = extractUserId(peerId);
-        if (remoteVideoRefs.current.delete(participantId)) {
-          onRemoteStreamsChanged?.();
-        }
-      });
-
-      call.on('error', (error) => {
-        console.error('[FRONT] Error en llamada de video saliente:', error);
-      });
+      const callVideo = peerVideo.call(peerId, videoStreamRef.current);
+      peerCallsRef.current.set(peerId, callVideo);
     } else {
-      console.log('[FRONT] No se pudo iniciar la llamada, instancia Peer no lista');
+      console.log('[FRONT] No se puede iniciar llamada - stream no disponible');
     }
   };
 
+  // Agregar función para enviar mute a todos los peers
   const sendMuteToPeers = (muted: boolean) => {
     peerCallsRef.current.forEach((call) => {
       if (call.dataChannel && call.dataChannel.readyState === 'open') {
@@ -287,43 +205,7 @@ export function usePeer(
     });
   };
 
-  useEffect(() => {
-    const stream = cameraOn && videoStreamRef.current ? videoStreamRef.current : null;
-    const track = stream?.getVideoTracks()[0] ?? null;
-
-    peerCallsRef.current.forEach((call, peerId) => {
-      if (!peerId.endsWith('_video')) {
-        return;
-      }
-      const connection = call.peerConnection as RTCPeerConnection | undefined;
-      if (!connection || typeof connection.getSenders !== 'function') {
-        return;
-      }
-      const senders = connection.getSenders().filter((sender) => sender.track?.kind === 'video');
-      if (track) {
-        if (senders.length > 0) {
-          senders.forEach((sender) => {
-            sender.replaceTrack(track).catch((error) => {
-              console.warn('[FRONT] Error reemplazando track de video:', error);
-            });
-          });
-        } else if (stream) {
-          try {
-            connection.addTrack(track, stream);
-          } catch (error) {
-            console.warn('[FRONT] Error agregando track de video:', error);
-          }
-        }
-      } else {
-        senders.forEach((sender) => {
-          sender.replaceTrack(null).catch((error) => {
-            console.warn('[FRONT] Error deteniendo track de video:', error);
-          });
-        });
-      }
-    });
-  }, [cameraOn, videoReadyVersion, videoStreamRef]);
-
+  // Exportar sendMuteToPeers
   return {
     peerVoice,
     peerVideo,
