@@ -111,7 +111,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const result = await signInWithPopup(auth, firebaseProvider);
       const idToken = await result.user.getIdToken();
       
-      // Envía idToken al backend
+      // Send idToken to the backend
       const backendResult = await api.socialLogin(idToken, provider);
       set({ user: backendResult.user, token: backendResult.token, isAuthed: true, isLoading: false });
     } catch (err: any) {
@@ -141,7 +141,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checkAuth: () => {
     const token = localStorage.getItem('token');
     if (token) {
-      // Opcional: Llama a api.me() para validar y setear user
+      // Optional: Call api.me() to validate and set user
       set({ token, isAuthed: true });
     } else {
       set({ isAuthed: false });

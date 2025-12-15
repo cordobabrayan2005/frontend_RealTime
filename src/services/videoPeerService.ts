@@ -1,5 +1,12 @@
 import Peer, { type MediaConnection } from "peerjs";
 
+/**
+ * Utility function to parse boolean environment variables.
+ *
+ * @param {string | undefined} value - Environment variable value.
+ * @param {boolean} fallback - Default value if parsing fails.
+ * @returns {boolean} Parsed boolean value.
+ */
 const parseBoolean = (value: string | undefined, fallback: boolean) => {
   if (value === undefined || value === null) {
     return fallback;
@@ -10,6 +17,13 @@ const parseBoolean = (value: string | undefined, fallback: boolean) => {
   return fallback;
 };
 
+/**
+ * Utility function to parse port numbers from environment variables.
+ *
+ * @param {string | undefined} value - Environment variable value.
+ * @param {number} fallback - Default port if parsing fails.
+ * @returns {number} Parsed port number.
+ */
 const parsePort = (value: string | undefined, fallback: number) => {
   if (!value) {
     return fallback;
@@ -18,6 +32,7 @@ const parsePort = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+// PeerJS configuration from environment variables
 const host =
   import.meta.env.VITE_PEER_HOST ||
   import.meta.env.VITE_PEERJS_HOST_VIDEO ||
@@ -46,6 +61,9 @@ const path =
   import.meta.env.VITE_PEERJS_PATH ||
   "/peerjs";
 
+/**
+ * PeerJS configuration object.
+ */
 const PEER_CONFIG = {
   host,
   port,
@@ -64,12 +82,25 @@ const PEER_CONFIG = {
 
 /**
  * Service class for managing PeerJS connections for RealTime video/audio calls.
+ *
+ * Responsibilities:
+ * - Initialize PeerJS with environment-based configuration.
+ * - Manage local media stream.
+ * - Handle outgoing and incoming calls.
+ * - Track active calls and clean them up when closed or errored.
+ * - Provide utility methods for closing calls and destroying the peer instance.
  */
 class VideoPeerService {
   private peer: Peer | null = null;
   private currentCalls: Map<string, MediaConnection> = new Map();
   private localStream: MediaStream | null = null;
 
+  /**
+   * Initializes the PeerJS instance with a given user ID.
+   *
+   * @param {string} userId - Unique identifier for the peer.
+   * @returns {Promise<string>} Resolves with the peer ID once connected.
+   */
   initialize(userId: string): Promise<string> {
     return new Promise((resolve, reject) => {
       if (this.peer && !this.peer.destroyed) {
@@ -100,10 +131,22 @@ class VideoPeerService {
     });
   }
 
+  /**
+   * Sets the local media stream to be used for answering calls.
+   *
+   * @param {MediaStream} stream - Local media stream.
+   */
   setLocalStream(stream: MediaStream): void {
     this.localStream = stream;
   }
 
+   /**
+   * Initiates a call to a remote peer.
+   *
+   * @param {string} remotePeerId - ID of the remote peer.
+   * @param {MediaStream} localStream - Local media stream to send.
+   * @returns {Promise<MediaStream>} Resolves with the remote peer's media stream.
+   */
   call(remotePeerId: string, localStream: MediaStream): Promise<MediaStream> {
     return new Promise((resolve, reject) => {
       if (!this.peer) {
@@ -144,6 +187,11 @@ class VideoPeerService {
     });
   }
 
+  /**
+   * Registers a callback for incoming calls.
+   *
+   * @param {(remotePeerId: string, remoteStream: MediaStream) => void} callback - Function to handle incoming streams.
+   */
   onCall(
     callback: (remotePeerId: string, remoteStream: MediaStream) => void
   ): void {
@@ -185,6 +233,11 @@ class VideoPeerService {
     });
   }
 
+  /**
+   * Closes a specific call by remote peer ID.
+   *
+   * @param {string} remotePeerId - ID of the remote peer.
+   */
   closeCall(remotePeerId: string): void {
     const call = this.currentCalls.get(remotePeerId);
     if (call) {
@@ -193,11 +246,17 @@ class VideoPeerService {
     }
   }
 
+  /**
+   * Closes all active calls.
+   */
   closeAllCalls(): void {
     this.currentCalls.forEach((call) => call.close());
     this.currentCalls.clear();
   }
 
+  /**
+   * Destroys the PeerJS instance and clears all calls.
+   */
   destroy(): void {
     this.closeAllCalls();
     if (this.peer) {
@@ -206,6 +265,11 @@ class VideoPeerService {
     }
   }
 
+  /**
+   * Gets the current peer ID.
+   *
+   * @returns {string | null} Peer ID or null if not initialized.
+   */
   getPeerId(): string | null {
     return this.peer?.id || null;
   }

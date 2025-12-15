@@ -2,12 +2,57 @@ import { useState, useEffect, useRef } from 'react';
 import Peer from 'peerjs';
 import { useAuthStore } from '../stores/authStore';
 
+/**
+ * Custom hook for managing PeerJS connections for voice and video calls.
+ *
+ * Features:
+ * - Initializes persistent PeerJS connections for voice and video.
+ * - Handles incoming calls (voice and video) and answers with local streams.
+ * - Plays remote audio/video streams automatically, with autoplay fallback handling.
+ * - Manages peer-to-peer DataChannels for mute/unmute signaling.
+ * - Provides functions to initiate calls and broadcast mute state to peers.
+ * - Cleans up PeerJS instances on unmount.
+ *
+ * @function usePeer
+ * @param {string | undefined} meetingId - Unique identifier of the meeting.
+ * @param {any} voiceSocket - Socket.IO connection for voice signaling.
+ * @param {any} videoSocket - Socket.IO connection for video signaling.
+ * @param {React.RefObject<MediaStream | null>} audioStreamRef - Ref to the local audio MediaStream.
+ * @param {React.RefObject<MediaStream | null>} videoStreamRef - Ref to the local video MediaStream.
+ * @param {boolean} cameraOn - Whether the local camera is enabled.
+ * @param {boolean} micOn - Whether the local microphone is enabled.
+ * @param {React.RefObject<Map<string, MediaStream>>} remoteVideoRefs - Ref to a map storing remote video streams keyed by user ID.
+ * @returns {{
+ *   peerVoice: Peer | null,
+ *   peerVideo: Peer | null,
+ *   peerStatus: 'connecting' | 'connected' | 'error',
+ *   peerCallsRef: React.MutableRefObject<Map<string, any>>,
+ *   initiateCall: (peerId: string) => Promise<void>,
+ *   sendMuteToPeers: (muted: boolean) => void
+ * }} Object containing PeerJS instances, status, references, and control functions.
+ *
+ * @example
+ * const {
+ *   peerVoice,
+ *   peerVideo,
+ *   peerStatus,
+ *   peerCallsRef,
+ *   initiateCall,
+ *   sendMuteToPeers,
+ * } = usePeer(meetingId, voiceSocket, videoSocket, audioStreamRef, videoStreamRef, cameraOn, micOn, remoteVideoRefs);
+ *
+ * // Initiate a voice call
+ * initiateCall("user123_voice");
+ *
+ * // Broadcast mute state
+ * sendMuteToPeers(true);
+ */
 export function usePeer(
   meetingId: string | undefined,
   voiceSocket: any,
   videoSocket: any,
-  audioStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar audioStreamRef
-  videoStreamRef: React.RefObject<MediaStream | null>,  // Corregido: Usar videoStreamRef
+  audioStreamRef: React.RefObject<MediaStream | null>,  // Fixed: Use audioStreamRef
+  videoStreamRef: React.RefObject<MediaStream | null>,  // Fixed: Use videoStreamRef
   cameraOn: boolean,
   micOn: boolean,
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>
@@ -21,7 +66,7 @@ export function usePeer(
   const PEERJS_HOST_VOICE = import.meta.env.VITE_PEERJS_HOST_VOICE || 'realtimevoicebackend.onrender.com';
   const PEERJS_HOST_VIDEO = import.meta.env.VITE_PEERJS_HOST_VIDEO || 'realtimevideocambackend.onrender.com';
 
-  // ==================== PEER DE VOZ (PERSISTENTE) ====================
+  // ==================== Voice PeerJS setup ====================
   useEffect(() => {
     if (!meetingId || !user || !voiceSocket) return;  // No depende de micOn
 
@@ -53,24 +98,24 @@ export function usePeer(
           audio.setAttribute('playsinline', 'true');
           audio.play().catch(err => console.error('Autoplay audio:', err));
         });
-        // Crear DataChannel para mute
+        // DataChannel for mute signaling
         const dataChannel = call.peerConnection.createDataChannel('mute-channel');
         dataChannel.onopen = () => {
           console.log('[FRONT] DataChannel abierto para mute con:', call.peer);
-          // Enviar estado inicial de mute
+          // Send initial mute state
           dataChannel.send(JSON.stringify({ type: 'mute', muted: !micOn }));
         };
         dataChannel.onmessage = (event) => {
           const data = JSON.parse(event.data);
           if (data.type === 'mute') {
-            // Mutear/desmutear el audio remoto localmente
+            // Mute/unmute remote audio locally
             const audioElement = document.querySelector(`audio[data-peer="${call.peer}"]`) as HTMLAudioElement;
             if (audioElement) {
               audioElement.muted = data.muted;
             }
           }
         };
-        // Guardar DataChannel en el call
+        // Save DataChannel in the call
         call.dataChannel = dataChannel;
       } else {
         console.log('[FRONT] Rechazando llamada de voz - mic apagado');
@@ -94,9 +139,9 @@ export function usePeer(
     };
   }, [meetingId, user?.id, voiceSocket]);  // Sin micOn
 
-  // ==================== PEER DE VIDEO (PERSISTENTE) ====================
+  // ==================== VIDEO PEER (PERSISTENT) ====================
   useEffect(() => {
-    if (!meetingId || !user || !videoSocket) return;  // No depende de cameraOn
+    if (!meetingId || !user || !videoSocket) return; 
 
     console.log('[FRONT] Inicializando Peer de video...');
     const newPeerVideo = new Peer(`${user.id}_video`, {
@@ -153,16 +198,16 @@ export function usePeer(
       console.log('[FRONT] Cleanup: destruyendo peer video');
       newPeerVideo.destroy();
     };
-  }, [meetingId, user?.id, videoSocket]);  // Sin cameraOn
+  }, [meetingId, user?.id, videoSocket]);  
 
-  // ==================== INICIAR LLAMADAS ====================
+  // ==================== START CALLS ====================
   const initiateCall = async (peerId: string) => {
     if (peerId.endsWith('_voice') && micOn && peerVoice && audioStreamRef.current) {
       console.log('[FRONT] Iniciando llamada de voz a:', peerId);
       const callVoice = peerVoice.call(peerId, audioStreamRef.current);
       peerCallsRef.current.set(peerId, callVoice);
 
-      // Manejar DataChannel en llamada iniciada
+      // Manage DataChannel in initiated call
       callVoice.on('stream', (remoteStream) => {
         console.log('[FRONT] Stream de voz recibido de:', peerId);
         const audio = document.createElement('audio');
@@ -173,7 +218,7 @@ export function usePeer(
         audio.play().catch(err => console.error('Autoplay audio:', err));
       });
 
-      // Escuchar DataChannel
+      // Listen to DataChannel
       callVoice.peerConnection.ondatachannel = (event) => {
         const dataChannel = event.channel;
         dataChannel.onmessage = (event) => {
@@ -187,7 +232,7 @@ export function usePeer(
         };
       };
     } else if (peerId.endsWith('_video') && cameraOn && peerVideo && videoStreamRef.current) {
-      // Video sin cambios
+      // Video unchanged
       console.log('[FRONT] Iniciando llamada de video a:', peerId);
       const callVideo = peerVideo.call(peerId, videoStreamRef.current);
       peerCallsRef.current.set(peerId, callVideo);
@@ -196,7 +241,7 @@ export function usePeer(
     }
   };
 
-  // Agregar función para enviar mute a todos los peers
+  // Add function to send mute to all peers
   const sendMuteToPeers = (muted: boolean) => {
     peerCallsRef.current.forEach((call) => {
       if (call.dataChannel && call.dataChannel.readyState === 'open') {
@@ -205,7 +250,7 @@ export function usePeer(
     });
   };
 
-  // Exportar sendMuteToPeers
+  // Export sendMuteToPeers
   return {
     peerVoice,
     peerVideo,

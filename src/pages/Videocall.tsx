@@ -7,10 +7,18 @@ import { useSockets } from '../services/sockets';
 import { setupWebRTCHandlers } from '../services/webrtc';
 
 
+/**
+ * Props for the ParticipantVideo component.
+ */
 interface ParticipantVideoProps {
   participantId: string;
   remoteVideoRefs: React.RefObject<Map<string, MediaStream>>;
 }
+/**
+ * Component to render a remote participant's video stream.
+ * @param {ParticipantVideoProps} props - The props for the component.
+ * @returns {JSX.Element} The video element for the participant.
+ */
 function ParticipantVideo({ participantId, remoteVideoRefs }: ParticipantVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -43,8 +51,8 @@ export default function VideoCall() {
   const remoteVideoRefs = useRef(new Map<string, MediaStream>());
 
   const {
-    audioStreamRef,  // Nuevo: Usar audioStreamRef para voz
-    videoStreamRef,  // Nuevo: Usar videoStreamRef para video
+    audioStreamRef,  // New: Use audioStreamRef for voice
+    videoStreamRef,  // New: Use audioStreamRef for voice
     localVideoRef,
     cameraOn,
     setCameraOn,
@@ -76,7 +84,7 @@ export default function VideoCall() {
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [messages, setMessages] = useState(() => [{ id: 1, author: 'Sistema', text: 'Bienvenido al chat de la reunión.' }]);
 
-  // 🔔 Modal no bloqueante
+  // Non-blocking modal
   const [modalVisible, setModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
 
@@ -95,12 +103,23 @@ export default function VideoCall() {
       }
     };
 
+    /**
+     * Handles receiving a chat message.
+     * @param {object} data - Message data.
+     * @param {string} data.author - Author of the message.
+     * @param {string} data.text - Message text.
+     * @param {string} data.timestamp - Timestamp.
+     */
     const handleReceiveMessage = (data: { author: string; text: string; timestamp: string }) => {
       console.log('[FRONT] Mensaje recibido:', data);
       setMessages((prev) => [...prev, { id: prev.length + 1, author: data.author, text: data.text }]);
       if (!showChat) setHasNewMessages(true);
     };
 
+    /**
+     * Handles the participants list update.
+     * @param {Array<{ userId: string; name: string }>} participantsList - List of participants.
+     */
     const handleParticipantsList = (participantsList: { userId: string; name: string }[]) => {
       console.log('[FRONT] Lista de participantes recibida:', participantsList);
       setParticipants(participantsList.map(p => ({
@@ -110,6 +129,9 @@ export default function VideoCall() {
       })));
     };
 
+    /**
+     * Cleans up media streams, peer connections, and sockets.
+     */
     const cleanupMedia = () => {
       console.log('[FRONT] Limpieza forzada de medios');
       peerCallsRef.current?.forEach((call) => {
@@ -118,8 +140,8 @@ export default function VideoCall() {
         } catch { }
       });
       peerCallsRef.current?.clear();
-      // FORZAR apagado del micrófono y cámara
-      if (audioStreamRef.current) {  // Corregido: Usar audioStreamRef
+      // FORCE microphone and camera off
+      if (audioStreamRef.current) {  // Fixed: Use audioStreamRef
         audioStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {  // Agregado tipo
           try {
             track.enabled = false;
@@ -128,7 +150,7 @@ export default function VideoCall() {
         });
         audioStreamRef.current = null;
       }
-      if (videoStreamRef.current) {  // Corregido: Usar videoStreamRef
+      if (videoStreamRef.current) {  // Fixed: Use videoStreamRef
         videoStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => {  // Agregado tipo
           try {
             track.enabled = false;
@@ -137,18 +159,21 @@ export default function VideoCall() {
         });
         videoStreamRef.current = null;
       }
-      // Destruir peers de voz y video
+      // Destroy voice and video peers
       try {
         peerVoice?.destroy();
         peerVideo?.destroy();
       } catch { }
-      // Forzar desconexión de sockets
+      // Force socket disconnection
       try {
         voiceSocket?.disconnect();
         videoSocket?.disconnect();
       } catch { }
     };
 
+    /**
+     * Handles force disconnect by the server.
+     */
     const handleForceDisconnect = () => {
       console.log('[FRONT] Forzado a desconectar por el servidor');
       cleanupMedia();
@@ -168,6 +193,10 @@ export default function VideoCall() {
       setTimeout(() => navigate('/realtime'), 1500);
     };
 
+    /**
+     * Handles meeting end.
+     * @param {string} message - End message.
+     */
     const handleMeetingEnded = (message: string) => {
       console.log('[FRONT] Reunión terminada:', message);
       cleanupMedia();
@@ -177,6 +206,12 @@ export default function VideoCall() {
       setTimeout(() => navigate('/realtime'), 2000);
     };
 
+    /**
+     * Handles a user joining the meeting.
+     * @param {object} data - User data.
+     * @param {string} data.userId - User ID.
+     * @param {string} data.name - User name.
+     */
     const handleUserJoined = (data: { userId: string; name: string }) => {
       console.log('[FRONT] Usuario unido:', data);
       setParticipants((prev) => {
@@ -185,17 +220,31 @@ export default function VideoCall() {
       });
     };
 
+    /**
+     * Handles a user leaving the meeting.
+     * @param {object} data - User data.
+     * @param {string} data.userId - User ID.
+     */
     const handleUserLeft = (data: { userId: string }) => {
       console.log('[FRONT] Usuario salió:', data);
       setParticipants((prev) => prev.filter(p => p.id !== data.userId));
     };
 
+    /**
+     * Handles socket errors.
+     * @param {string} msg - Error message.
+     */
     const handleSocketError = (msg: string) => {
       console.error('[FRONT] Error de socket:', msg);
       setModalMessage(`Error: ${msg}`);
       setModalVisible(true);
     };
 
+    /**
+     * Handles voice room join and initiates calls to peers.
+     * @param {object} data - Voice join data.
+     * @param {string[]} data.peers - List of peer IDs.
+     */
     const handleVoiceJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Voice joined, connecting to peers:', data.peers);
       data.peers.forEach(peerId => {
@@ -203,11 +252,19 @@ export default function VideoCall() {
       });
     };
 
+    /**
+     * Handles a peer joining the voice room.
+     * @param {string} peerId - Peer ID.
+     */
     const handlePeerJoined = (peerId: string) => {
       console.log('[FRONT] Peer joined voice:', peerId);
       if (micOn) initiateCall(peerId);
     };
 
+    /**
+     * Handles a peer disconnecting from voice or video.
+     * @param {string} peerId - Peer ID.
+     */
     const handlePeerDisconnected = (peerId: string) => {
       const pc = peerCallsRef.current.get(peerId);
       if (pc) {
@@ -216,12 +273,21 @@ export default function VideoCall() {
       }
     };
 
+    /**
+     * Handles voice errors.
+     * @param {string} msg - Error message.
+     */
     const handleVoiceError = (msg: string) => {
       console.error('[FRONT] Voice error:', msg);
       setModalMessage(`Voice error: ${msg}`);
       setModalVisible(true);
     };
 
+    /**
+     * Handles video room join and initiates video calls.
+     * @param {object} data - Video join data.
+     * @param {string[]} data.peers - List of peer IDs.
+     */
     const handleVideoJoined = (data: { peers: string[] }) => {
       console.log('[FRONT] Video joined, connecting to peers:', data.peers);
       data.peers.forEach(peerId => {
@@ -229,18 +295,27 @@ export default function VideoCall() {
       });
     };
 
+    /**
+     * Handles video room join and initiates video calls.
+     * @param {object} data - Video join data.
+     * @param {string[]} data.peers - List of peer IDs.
+     */
     const handlePeerJoinedVideo = (peerId: string) => {
       console.log('[FRONT] Peer joined video:', peerId);
       if (cameraOn) initiateCall(peerId);
     };
 
+    /**
+     * Handles video errors.
+     * @param {string} msg - Error message.
+     */
     const handleVideoError = (msg: string) => {
       console.error('[FRONT] Video error:', msg);
       setModalMessage(`Video error: ${msg}`);
       setModalVisible(true);
     };
 
-    // Eliminar listeners previos para evitar duplicados
+    // Remove previous listeners to avoid duplicates
     socket.removeAllListeners('connect');
     socket.removeAllListeners('receive-message');
     socket.removeAllListeners('participants-list');
@@ -263,7 +338,7 @@ export default function VideoCall() {
     videoSocket.removeAllListeners('video-error');
     videoSocket.removeAllListeners('force-disconnect');
 
-    // Registrar handlers
+    // Register handlers
     socket.on('connect', handleConnect);
     socket.on('receive-message', handleReceiveMessage);
     socket.on('participants-list', handleParticipantsList);
@@ -319,6 +394,10 @@ export default function VideoCall() {
     }
   };
 
+  /**
+   * Sends a chat message.
+   * @param {React.FormEvent} [e] - The form event.
+   */
   const sendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const text = chatInput.trim();
@@ -329,6 +408,9 @@ export default function VideoCall() {
     setChatInput('');
   };
 
+  /**
+   * Handles hanging up the call and ending the meeting if creator.
+   */
   const hangup = async () => {
     if (isCreator && meetingId) {
       try {

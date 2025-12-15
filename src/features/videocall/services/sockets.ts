@@ -2,6 +2,46 @@ import { useEffect, useMemo, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../../../stores/authStore';
 
+/**
+ * Custom hook for managing Socket.IO connections to chat, voice, and video backends.
+ *
+ * Features:
+ * - Initializes three separate sockets (chat, voice, video) with authentication.
+ * - Handles reconnection attempts and delays.
+ * - Fetches ICE server configurations for voice and video backends.
+ * - Determines if the current user is the meeting creator.
+ * - Cleans up sockets on unmount or dependency change.
+ *
+ * @function useSockets
+ * @param {string | undefined} meetingId - The unique identifier of the meeting.
+ * @returns {{
+ *   socket: Socket | null,
+ *   voiceSocket: Socket | null,
+ *   videoSocket: Socket | null,
+ *   isCreator: boolean,
+ *   CHAT_BACKEND_URL: string,
+ *   VOICE_BACKEND_URL: string,
+ *   VIDEO_BACKEND_URL: string
+ * }} Object containing socket instances, creator flag, and backend URLs.
+ *
+ * @example
+ * const {
+ *   socket,
+ *   voiceSocket,
+ *   videoSocket,
+ *   isCreator,
+ *   CHAT_BACKEND_URL,
+ *   VOICE_BACKEND_URL,
+ *   VIDEO_BACKEND_URL,
+ * } = useSockets("meeting123");
+ *
+ * // Example usage: listen for chat messages
+ * useEffect(() => {
+ *   if (socket) {
+ *     socket.on("message", (msg) => console.log("Chat message:", msg));
+ *   }
+ * }, [socket]);
+ */
 export function useSockets(meetingId: string | undefined) {
   const { token, user } = useAuthStore();
   const [socket, setSocket] = useState<Socket | null>(null);

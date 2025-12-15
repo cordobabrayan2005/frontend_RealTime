@@ -1,5 +1,28 @@
 import { Socket } from 'socket.io-client';
 
+/**
+ * Sets up WebRTC event handlers for managing peer-to-peer audio connections.
+ *
+ * Features:
+ * - Handles incoming WebRTC offers, creates peer connections, and responds with answers.
+ * - Adds local audio tracks to the peer connection.
+ * - Emits ICE candidates to the signaling server via `voiceSocket`.
+ * - Plays remote audio streams automatically, with a fallback for autoplay restrictions.
+ * - Handles incoming WebRTC answers and ICE candidates.
+ * - Returns a cleanup function to remove event listeners when no longer needed.
+ *
+ * @function setupWebRTCHandlers
+ * @param {Socket | null} voiceSocket - The Socket.IO connection used for signaling WebRTC events.
+ * @param {React.MutableRefObject<Map<string, any>>} peerCallsRef - Reference to a map storing peer connections keyed by sender socket IDs.
+ * @param {React.RefObject<MediaStream | null>} audioStreamRef - Reference to the local audio MediaStream.
+ * @returns {() => void} Cleanup function that removes the registered event listeners.
+ *
+ * @example
+ * const cleanup = setupWebRTCHandlers(voiceSocket, peerCallsRef, audioStreamRef);
+ *
+ * // Later, when cleaning up:
+ * cleanup();
+ */
 export function setupWebRTCHandlers(
   voiceSocket: Socket | null,
   peerCallsRef: React.MutableRefObject<Map<string, any>>,

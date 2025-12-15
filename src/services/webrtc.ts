@@ -1,18 +1,38 @@
 import { Socket } from 'socket.io-client';
 
 /**
- * Manejo de señalización WebRTC vía Socket.io
+ * Sets up WebRTC signaling event handlers using a Socket.IO connection.
+ *
+ * Features:
+ * - Handles incoming WebRTC offers: creates a peer connection, attaches local audio tracks,
+ *   sets remote description, generates an answer, and emits it back via the signaling socket.
+ * - Handles incoming WebRTC answers: applies the remote description to the existing peer connection.
+ * - Handles incoming ICE candidates: adds them to the corresponding peer connection.
+ * - Plays remote audio streams automatically, with a fallback for autoplay restrictions.
+ * - Returns a cleanup function to remove all registered event listeners.
+ *
+ * @function setupWebRTCHandlers
+ * @param {Socket | null} voiceSocket - The Socket.IO connection used for signaling WebRTC events.
+ * @param {React.MutableRefObject<Map<string, any>>} peerCallsRef - Reference to a map storing peer connections keyed by sender socket IDs.
+ * @param {React.RefObject<MediaStream | null>} audioStreamRef - Reference to the local audio MediaStream.
+ * @returns {() => void} Cleanup function that removes the registered event listeners.
+ *
+ * @example
+ * const cleanup = setupWebRTCHandlers(voiceSocket, peerCallsRef, audioStreamRef);
+ *
+ * // Later, when cleaning up:
+ * cleanup();
  */
 export function setupWebRTCHandlers(
   voiceSocket: Socket | null,
   peerCallsRef: React.MutableRefObject<Map<string, any>>,
-  audioStreamRef: React.RefObject<MediaStream | null>  // Corregido: Usar audioStreamRef
+  audioStreamRef: React.RefObject<MediaStream | null>  // Fixed: Use audioStreamRef
 ) {
   if (!voiceSocket) return () => { };
 
   const handleWebRTCOffer = (data: { senderSocketId: string; offer: RTCSessionDescriptionInit }) => {
     console.log('[FRONT] Received offer from:', data.senderSocketId);
-    if (audioStreamRef.current) {  // Corregido: Usar audioStreamRef
+    if (audioStreamRef.current) {  // Fixed: Use audioStreamRef
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },

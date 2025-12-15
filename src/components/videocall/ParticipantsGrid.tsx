@@ -2,6 +2,16 @@ import React from 'react';
 import { Participant } from './types';
 import { ParticipantVideo } from './ParticipantVideo';
 
+/**
+ * Props for the ParticipantsGrid component.
+ *
+ * @interface ParticipantsGridProps
+ * @property {Participant[]} participants - List of participants in the call.
+ * @property {React.MutableRefObject<HTMLVideoElement | null>} localVideoRef - Ref for the local video element.
+ * @property {boolean} cameraOn - Indicates whether the local camera is enabled.
+ * @property {React.MutableRefObject<Map<string, MediaStream>>} remoteVideoRefs - Map of participant IDs to their remote MediaStreams.
+ * @property {number} remoteStreamsVersion - Version number used to trigger re-renders when remote streams change.
+ */
 interface ParticipantsGridProps {
   participants: Participant[];
   localVideoRef: React.MutableRefObject<HTMLVideoElement | null>;
@@ -10,8 +20,45 @@ interface ParticipantsGridProps {
   remoteStreamsVersion: number;
 }
 
+/**
+ * Utility function to generate initials from a participant's name.
+ *
+ * @function getInitials
+ * @param {string} name - Full name of the participant.
+ * @returns {string} Initials (up to 2 characters).
+ *
+ * @example
+ * getInitials("John Doe"); // "JD"
+ */
 const getInitials = (name: string) => name.split(' ').map((n) => n[0]).join('').slice(0, 2);
 
+/**
+ * ParticipantsGrid component.
+ *
+ * Renders a grid of participant tiles for a video call. Each tile displays:
+ * - Local participant: either the live video (if camera is on) or a placeholder avatar.
+ * - Remote participant: either their video stream (if available) or initials avatar.
+ *
+ * Accessibility features:
+ * - `aria-live="polite"` for dynamic updates.
+ * - Each participant tile is labeled with their name.
+ *
+ * @component
+ * @param {ParticipantsGridProps} props - Component props.
+ * @returns {JSX.Element} A grid of participant tiles.
+ *
+ * @example
+ * <ParticipantsGrid
+ *   participants={[
+ *     { id: '1', name: 'Alice', isLocal: true },
+ *     { id: '2', name: 'Bob', isLocal: false }
+ *   ]}
+ *   localVideoRef={localVideoRef}
+ *   cameraOn={true}
+ *   remoteVideoRefs={remoteVideoRefs}
+ *   remoteStreamsVersion={1}
+ * />
+ */
 export const ParticipantsGrid: React.FC<ParticipantsGridProps> = ({
   participants,
   localVideoRef,

@@ -3,7 +3,44 @@ import io, { Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
 
 /**
- * Hook para manejar sockets de chat, voz y video
+ * Custom hook for managing Socket.IO connections to chat, voice, and video backends.
+ *
+ * Features:
+ * - Initializes three separate sockets (chat, voice, video) with authentication.
+ * - Handles reconnection attempts and delays.
+ * - Fetches ICE server configurations for voice and video backends.
+ * - Determines if the current user is the meeting creator.
+ * - Cleans up sockets on unmount or dependency change.
+ *
+ * @function useSockets
+ * @param {string | undefined} meetingId - The unique identifier of the meeting.
+ * @returns {{
+ *   socket: Socket | null,
+ *   voiceSocket: Socket | null,
+ *   videoSocket: Socket | null,
+ *   isCreator: boolean,
+ *   CHAT_BACKEND_URL: string,
+ *   VOICE_BACKEND_URL: string,
+ *   VIDEO_BACKEND_URL: string
+ * }} Object containing socket instances, creator flag, and backend URLs.
+ *
+ * @example
+ * const {
+ *   socket,
+ *   voiceSocket,
+ *   videoSocket,
+ *   isCreator,
+ *   CHAT_BACKEND_URL,
+ *   VOICE_BACKEND_URL,
+ *   VIDEO_BACKEND_URL,
+ * } = useSockets("meeting123");
+ *
+ * // Example usage: listen for chat messages
+ * useEffect(() => {
+ *   if (socket) {
+ *     socket.on("message", (msg) => console.log("Chat message:", msg));
+ *   }
+ * }, [socket]);
  */
 export function useSockets(meetingId: string | undefined) {
   const { token, user } = useAuthStore();
@@ -21,7 +58,7 @@ export function useSockets(meetingId: string | undefined) {
 
     console.log('[FRONT] Inicializando sockets para reunión:', meetingId);
 
-    // 1. Socket de chat
+    // 1. Chat socket
     const newSocket = io(CHAT_BACKEND_URL, {
       auth: { token },
       reconnection: true,
@@ -30,7 +67,7 @@ export function useSockets(meetingId: string | undefined) {
     });
     setSocket(newSocket);
 
-    // 2. Socket de voz
+    // 2. Voice socket
     const newVoiceSocket = io(VOICE_BACKEND_URL, {
       auth: { token },
       reconnection: true,
@@ -39,7 +76,7 @@ export function useSockets(meetingId: string | undefined) {
     });
     setVoiceSocket(newVoiceSocket);
 
-    // 3. Socket de video
+    // 3. Video socket
     const newVideoSocket = io(VIDEO_BACKEND_URL, {
       auth: { token },
       reconnection: true,
@@ -48,7 +85,7 @@ export function useSockets(meetingId: string | undefined) {
     });
     setVideoSocket(newVideoSocket);
 
-    // Obtener ICE servers de ambos backends
+    // Fetch ICE servers
     fetch(`${VOICE_BACKEND_URL}/api/ice-servers`)
       .then(res => res.json())
       .then(data => console.log('[FRONT] ICE servers voz:', data.iceServers))
@@ -59,7 +96,7 @@ export function useSockets(meetingId: string | undefined) {
       .then(data => console.log('[FRONT] ICE servers video:', data.iceServers))
       .catch(err => console.error('[FRONT] Error ICE video:', err));
 
-    // Verificar si es el creador
+    // Check if user is meeting creator
     fetch(`${CHAT_BACKEND_URL}/api/meetings/${meetingId}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     })
@@ -75,17 +112,17 @@ export function useSockets(meetingId: string | undefined) {
       console.log('[FRONT] Cleanup: desconectando sockets');
       newSocket.disconnect();
       newVoiceSocket.disconnect();
-      newVideoSocket.disconnect();  // Nuevo
+      newVideoSocket.disconnect();  
     };
   }, [meetingId, token, user?.id]);
 
   return {
     socket,
     voiceSocket,
-    videoSocket,  // Nuevo
+    videoSocket,  
     isCreator,
     CHAT_BACKEND_URL,
     VOICE_BACKEND_URL,
-    VIDEO_BACKEND_URL  // Nuevo
+    VIDEO_BACKEND_URL  
   };
 }

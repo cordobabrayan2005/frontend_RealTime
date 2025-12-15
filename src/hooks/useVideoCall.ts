@@ -2,6 +2,17 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { videoSocketService } from "../services/videoSocketService";
 import { videoPeerService } from "../services/videoPeerService";
 
+/**
+ * Represents a participant in the video call.
+ *
+ * @interface Participant
+ * @property {string} socketId - Unique identifier for the participant's socket connection.
+ * @property {string} odiserId - Unique identifier for the participant in the peer network.
+ * @property {string} displayName - Display name of the participant.
+ * @property {boolean} isAudioEnabled - Whether the participant's audio is enabled.
+ * @property {boolean} isVideoEnabled - Whether the participant's video is enabled.
+ * @property {MediaStream} [stream] - Optional media stream associated with the participant.
+ */
 interface Participant {
   socketId: string;
   odiserId: string;
@@ -11,6 +22,13 @@ interface Participant {
   stream?: MediaStream;
 }
 
+/**
+ * Normalizes participant data to ensure audio/video flags are boolean.
+ *
+ * @function normalizeParticipant
+ * @param {Participant} participant - Participant object to normalize.
+ * @returns {Participant} Normalized participant object.
+ */
 const normalizeParticipant = (participant: Participant): Participant => ({
   ...participant,
   isAudioEnabled:
@@ -23,6 +41,58 @@ const normalizeParticipant = (participant: Participant): Participant => ({
       : true,
 });
 
+/**
+ * Custom hook for managing video calls using WebRTC and Socket.IO.
+ *
+ * Features:
+ * - Initializes local audio/video streams.
+ * - Connects to a video room via socket service.
+ * - Manages participants list and their media states.
+ * - Handles joining, leaving, and toggling audio/video.
+ * - Cleans up resources on disconnect or unmount.
+ *
+ * @function useVideoCall
+ * @param {string} roomId - Unique identifier of the video room.
+ * @param {string} userId - Unique identifier of the current user.
+ * @param {string} displayName - Display name of the current user.
+ * @returns {{
+ *   participants: Map<string, Participant>,
+ *   localStream: MediaStream | null,
+ *   localVideoRef: React.RefObject<HTMLVideoElement>,
+ *   isAudioEnabled: boolean,
+ *   isVideoEnabled: boolean,
+ *   isConnected: boolean,
+ *   error: string | null,
+ *   joinRoom: () => Promise<void>,
+ *   leaveRoom: () => void,
+ *   toggleAudio: () => void,
+ *   toggleVideo: () => void
+ * }} Object containing participants, local stream, refs, states, and control functions.
+ *
+ * @example
+ * const {
+ *   participants,
+ *   localStream,
+ *   localVideoRef,
+ *   isAudioEnabled,
+ *   isVideoEnabled,
+ *   isConnected,
+ *   error,
+ *   joinRoom,
+ *   leaveRoom,
+ *   toggleAudio,
+ *   toggleVideo,
+ * } = useVideoCall("room123", "user456", "Daniel");
+ *
+ * // Attach local video
+ * <video ref={localVideoRef} autoPlay muted playsInline />
+ *
+ * // Join the room
+ * useEffect(() => {
+ *   joinRoom();
+ *   return () => leaveRoom();
+ * }, []);
+ */
 export function useVideoCall(
   roomId: string,
   userId: string,
